@@ -1,0 +1,15 @@
+{
+  "name": "Ritmo — cronograma de residência",
+  "short_name": "Ritmo",
+  "description": "Cronograma de estudo para residência médica com revisão espaçada e priorização por desempenho.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E7EBEC",
+  "theme_color": "#12262F",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
