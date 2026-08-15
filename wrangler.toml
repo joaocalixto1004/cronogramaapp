@@ -14,4 +14,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding       = "DB"
 database_name = "ritmo"
-database_id   = "PREENCHER-COM-O-ID-DO-D1"
+database_id   = "85977e78-3a75-4e6a-a33c-5b0576817f83"

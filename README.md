@@ -56,16 +56,24 @@ git push -u origin main
 
 ### 2. Banco D1
 
+Já está criado e o `database_id` já está no `wrangler.toml`. O que segue é só para
+recriar do zero, num outro lugar ou noutra conta.
+
+Pelo painel, sem terminal — **Storage & Databases** → **D1 SQL Database** →
+**Create Database**, com o nome `ritmo`. Abra o banco, vá em **Console**, cole o conteúdo
+de [`schema.sql`](schema.sql) e execute. O **Database ID** aparece na página do banco:
+copie para o `wrangler.toml`.
+
+Pelo terminal, se preferir (exige um login próprio da Cloudflare, que costuma não
+funcionar dentro de um Codespace):
+
 ```bash
-npx wrangler@4 d1 create ritmo
+npx wrangler@4 d1 create ritmo   # devolve o database_id
+npm run db:producao              # cria a tabela
 ```
 
-Copie o `database_id` devolvido para o `wrangler.toml` (substitui `PREENCHER-COM-O-ID-DO-D1`)
-e crie a tabela:
-
-```bash
-npm run db:producao
-```
+O `database_id` é um identificador, não um segredo — por isso vive em arquivo
+versionado. Quem protege o banco é o token da conta, que não entra no repositório.
 
 ### 3. Worker
 
