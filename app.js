@@ -309,14 +309,43 @@ function renderFila(ts) {
   }));
 }
 
+/* ---------- avisos ----------
+   No lugar de alert() e confirm(), que travam a página e não cabem no meio
+   de uma sessão de estudo. Remover e registrar acontecem na hora e ficam
+   desfazíveis por alguns segundos — mais rápido que confirmar toda vez, e
+   mais seguro, porque cobre também o clique errado que um confirm aprovaria. */
+const AVISO_SEGUNDOS = 7;
+let avisoTimer = null;
+
+function avisar(texto, acao) {
+  const caixa = $("aviso"), bt = $("avisoAcao");
+  clearTimeout(avisoTimer);
+  $("avisoTexto").textContent = texto;
+
+  bt.hidden = !acao;
+  bt.onclick = null;
+  if (acao) {
+    bt.textContent = acao.rotulo;
+    bt.onclick = () => { esconderAviso(); acao.aoClicar(); };
+  }
+
+  caixa.dataset.visivel = "1";
+  if (!acao?.fixo) avisoTimer = setTimeout(esconderAviso, AVISO_SEGUNDOS * 1000);
+}
+function esconderAviso() {
+  clearTimeout(avisoTimer);
+  $("aviso").dataset.visivel = "0";
+}
+
 /* ---------- ponte com o log ---------- */
 function recalcular() {
   dados = derivar(sync.todos());
   render();
 }
 function registrarEvento(tipo, dadosEv) {
-  sync.adicionar(tipo, dadosEv);
+  const ev = sync.adicionar(tipo, dadosEv);
   recalcular();
+  return ev;
 }
 
 /* ---------- interações ---------- */
@@ -326,7 +355,12 @@ document.addEventListener("click", (e) => {
   const del = e.target.closest("[data-del]");
   if (del) {
     const t = dados.temas.find((x) => x.id === del.dataset.del);
-    if (t && confirm(`Remover “${t.nome}” do cronograma?`)) registrarEvento("tema-", { tema: t.id });
+    if (!t) return;
+    registrarEvento("tema-", { tema: t.id });
+    avisar(`“${t.nome}” saiu do cronograma.`, {
+      rotulo: "desfazer",
+      aoClicar: () => registrarEvento("tema+", { tema: t.id, nome: t.nome, area: t.area, peso: t.peso }),
+    });
   }
 });
 
@@ -358,7 +392,13 @@ dlgReg.addEventListener("close", () => {
   if (dlgReg.returnValue !== "ok") return;
   const t = dados.temas.find((x) => x.id === alvoId);
   if (!t) return;
-  registrarEvento("estudo", { tema: t.id, data: $("regData").value || hoje(), acertos: +rangeAc.value });
+  const acertos = +rangeAc.value;
+  const ev = registrarEvento("estudo", { tema: t.id, data: $("regData").value || hoje(), acertos });
+  const novo = dados.temas.find((x) => x.id === t.id);
+  avisar(`${t.nome}: ${acertos}% — volta em ${fmt(novo?.proxima)}`, {
+    rotulo: "desfazer",
+    aoClicar: () => registrarEvento("estudo-", { evento: ev.id }),
+  });
 });
 
 const dlgNovo = $("dlgNovo");
@@ -375,7 +415,7 @@ dlgNovo.addEventListener("close", () => {
   if (!nome) return;
   const id = idTema(area, nome);
   if (!ID_VALIDO.test(id)) {
-    alert("Use ao menos uma letra ou número no nome do tema.");
+    avisar("Use ao menos uma letra ou número no nome do tema.");
     return;
   }
   registrarEvento("tema+", { tema: id, nome, area, peso: +$("nvPeso").value });
@@ -424,9 +464,9 @@ $("fileImp").addEventListener("change", async (e) => {
     if (!lista) throw new Error("formato");
     const n = sync.importar(lista);
     recalcular();
-    alert(n ? `${n} evento${n > 1 ? "s" : ""} importado${n > 1 ? "s" : ""}.` : "Nada novo: o arquivo já estava todo aqui.");
+    avisar(n ? `${n} evento${n > 1 ? "s" : ""} importado${n > 1 ? "s" : ""}.` : "Nada novo: o arquivo já estava todo aqui.");
   } catch {
-    alert("Este arquivo não é um backup do Ritmo. Selecione um .json exportado pelo próprio app.");
+    avisar("Este arquivo não é um backup do Ritmo. Selecione um .json exportado pelo próprio app.");
   }
   e.target.value = "";
 });
@@ -447,18 +487,17 @@ sync.aoMudar(({ estado, detalhe, pendentes, recarregar }) => {
 
 /* ---------- service worker ---------- */
 if ("serviceWorker" in navigator) {
-  const aviso = $("aviso");
   navigator.serviceWorker.register("sw.js").then((reg) => {
     reg.addEventListener("updatefound", () => {
       const novo = reg.installing;
       novo?.addEventListener("statechange", () => {
         // controller existente = já havia uma versão rodando, logo é atualização.
         if (novo.state === "installed" && navigator.serviceWorker.controller) {
-          aviso.dataset.visivel = "1";
-          $("btnAtualizar").onclick = () => {
-            novo.postMessage({ tipo: "assumir" });
-            aviso.dataset.visivel = "0";
-          };
+          // fixo: uma atualização não deve sumir sozinha antes de ser vista.
+          avisar("Nova versão disponível.", {
+            rotulo: "recarregar", fixo: true,
+            aoClicar: () => novo.postMessage({ tipo: "assumir" }),
+          });
         }
       });
     });

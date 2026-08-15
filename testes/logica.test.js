@@ -314,3 +314,48 @@ test("temas atrasados vêm antes dos nunca vistos", () => {
   const f = filaDeHoje(temas, "", hj);
   assert.equal(f.itens[0].id, "a/atrasado");
 });
+
+/* ---------- desfazer ---------- */
+
+test("estudo anulado some do histórico e devolve a etapa anterior", () => {
+  const bom = estudo(ALVO, "2026-01-01", 90);
+  const errado = estudo(ALVO, "2026-01-05", 20);   // registrado no tema errado
+  const comErro = acha(derivar([bom, errado]), ALVO);
+  assert.equal(comErro.etapa, 0, "o 20% zerou o ciclo");
+  assert.equal(comErro.historico.length, 2);
+
+  const anulado = { id: "an", tipo: "estudo-", ts: "2026-01-05T12:00:00.000Z", dados: { evento: errado.id } };
+  const t = acha(derivar([bom, errado, anulado]), ALVO);
+  assert.equal(t.historico.length, 1, "o registro errado sai do histórico");
+  assert.deepEqual(t.historico[0], { d: "2026-01-01", a: 90 });
+  assert.equal(t.etapa, 1, "a etapa volta a ser a que era antes do erro");
+});
+
+test("anular vale independentemente da ordem de chegada", () => {
+  const e = estudo(ALVO, "2026-02-01", 30);
+  const anular = { id: "an", tipo: "estudo-", ts: "2026-02-01T12:00:00.000Z", dados: { evento: e.id } };
+  assert.equal(acha(derivar([anular, e]), ALVO).historico.length, 0);
+  assert.equal(acha(derivar([e, anular]), ALVO).historico.length, 0);
+});
+
+test("anular um evento que não existe é inofensivo", () => {
+  const e = estudo(ALVO, "2026-02-01", 90);
+  const anular = { id: "an", tipo: "estudo-", ts: "2026-02-02T00:00:00.000Z", dados: { evento: "nunca-existiu" } };
+  assert.equal(acha(derivar([e, anular]), ALVO).historico.length, 1);
+});
+
+test("remover e desfazer devolve o tema com o histórico intacto", () => {
+  const evs = [
+    estudo(ALVO, "2026-01-01", 90),
+    { id: "rm", tipo: "tema-", ts: "2026-02-01T00:00:00.000Z", dados: { tema: ALVO } },
+  ];
+  assert.equal(acha(derivar(evs), ALVO), undefined);
+
+  const desfeito = [...evs, {
+    id: "undo", tipo: "tema+", ts: "2026-02-01T00:00:05.000Z",
+    dados: { tema: ALVO, nome: "Tuberculose", area: "Clínica Médica", peso: 3 },
+  }];
+  const t = acha(derivar(desfeito), ALVO);
+  assert.ok(t, "o tema volta");
+  assert.equal(t.historico.length, 1, "e o histórico volta com ele");
+});

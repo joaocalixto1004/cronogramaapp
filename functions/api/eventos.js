@@ -23,6 +23,7 @@ const inteiro = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
 
 const SCHEMAS = {
   estudo: (d) => idTema(d.tema) && dataISO(d.data) && inteiro(d.acertos, 0, 100),
+  "estudo-": (d) => texto(d.evento, 100),
   "tema+": (d) => idTema(d.tema) && texto(d.nome, 120) && texto(d.area, 80) && inteiro(d.peso, 1, 3),
   "tema-": (d) => idTema(d.tema),
   prova: (d) => typeof d.nome === "string" && d.nome.length <= 80 && (d.data === "" || dataISO(d.data)),
@@ -41,10 +42,11 @@ function limpar(ev) {
   // Reserializa a partir do schema: campos extras enviados pelo cliente não
   // são gravados, então o banco só contém o que este arquivo reconhece.
   const dados =
-    ev.tipo === "estudo"  ? { tema: ev.dados.tema, data: ev.dados.data, acertos: ev.dados.acertos }
-    : ev.tipo === "tema+" ? { tema: ev.dados.tema, nome: ev.dados.nome, area: ev.dados.area, peso: ev.dados.peso }
-    : ev.tipo === "tema-" ? { tema: ev.dados.tema }
-    :                       { nome: ev.dados.nome, data: ev.dados.data };
+    ev.tipo === "estudo"    ? { tema: ev.dados.tema, data: ev.dados.data, acertos: ev.dados.acertos }
+    : ev.tipo === "estudo-" ? { evento: ev.dados.evento }
+    : ev.tipo === "tema+"   ? { tema: ev.dados.tema, nome: ev.dados.nome, area: ev.dados.area, peso: ev.dados.peso }
+    : ev.tipo === "tema-"   ? { tema: ev.dados.tema }
+    :                         { nome: ev.dados.nome, data: ev.dados.data };
 
   return { id: ev.id, tipo: ev.tipo, ts: ev.ts, dados };
 }

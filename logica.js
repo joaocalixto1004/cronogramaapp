@@ -184,8 +184,13 @@ export function derivar(eventos) {
   }
 
   // 3) estudos, em ordem de data de estudo — não de criação do evento.
+  //    Um registro no tema errado não pode ser apagado do log, então é
+  //    anulado por um evento que aponta para ele.
+  const anulados = new Set();
+  for (const ev of porTs) if (ev.tipo === "estudo-") anulados.add(ev.dados.evento);
+
   const estudos = eventos
-    .filter((e) => e.tipo === "estudo")
+    .filter((e) => e.tipo === "estudo" && !anulados.has(e.id))
     .sort((a, b) =>
       a.dados.data < b.dados.data ? -1 : a.dados.data > b.dados.data ? 1
       : a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);

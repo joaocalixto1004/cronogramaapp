@@ -29,6 +29,12 @@ Registrar um estudo grava local e devolve o controle na hora — a tela nunca es
 O que ainda não subiu fica marcado como pendente e sobrevive a fechar o app; o envio
 acontece sozinho quando há sinal. O rodapé mostra o estado.
 
+**Desfazer.** Registrar no tema errado e remover um tema acontecem na hora, sem caixa de
+confirmação, e ficam desfazíveis por alguns segundos no aviso que aparece no rodapé.
+Como o log não admite apagar, desfazer acrescenta um evento que anula o anterior — o que
+também significa que a correção se propaga para os outros aparelhos como qualquer
+outra coisa.
+
 ---
 
 ## Subir no ar
