@@ -11,7 +11,7 @@ import {
   INTERVALOS, AREAS, ID_VALIDO,
   idTema, hoje, diasEntre, somaDias, fmt,
   ultimo, desempenho, atraso, prioridade,
-  derivar, eventosDoFormatoAntigo,
+  derivar, eventosDoFormatoAntigo, filaDeHoje,
 } from "./logica.js";
 
 const CHAVE_ANTIGA = "ritmo.v1";
@@ -109,15 +109,15 @@ function sequencia() {
 }
 
 function renderFila(ts) {
-  const hj = hoje();
-  const feitosHoje = ts.filter((t) => ultimo(t) && ultimo(t).d === hj).length;
-  const pend = ts.filter((t) => !(ultimo(t) && ultimo(t).d === hj))
-                 .sort((a, b) => prioridade(b) - prioridade(a))
-                 .slice(0, 5);
-  $("tituloFila").textContent = feitosHoje
-    ? `Mais ${pend.length ? "temas" : "nada"} para hoje — ${feitosHoje} já registrado${feitosHoje > 1 ? "s" : ""}`
-    : "O que estudar agora";
-  $("fila").innerHTML = pend.map((t) => {
+  const { meta, feitos, itens, restam } = filaDeHoje(ts, dados.prova.data);
+  const plural = (n) => (n > 1 ? "s" : "");
+
+  $("tituloFila").textContent =
+    !restam ? "Tudo em dia"
+    : itens.length ? `${itens.length} de ${meta} para hoje${feitos ? ` — ${feitos} já registrado${plural(feitos)}` : ""}`
+    : `Meta do dia cumprida — ${feitos} registrado${plural(feitos)}`;
+
+  $("fila").innerHTML = itens.map((t) => {
     const a = atraso(t);
     const tag = a === null ? '<span class="tag novo">novo</span>'
       : a > 0 ? `<span class="tag atr">${a}d atrás</span>`
@@ -126,7 +126,11 @@ function renderFila(ts) {
     return `<li>${tag}<span class="nome">${esc(t.nome)}</span>
       <span class="area">${esc(t.area.split(" ")[0])}</span>
       <button data-reg="${esc(t.id)}">registrar</button></li>`;
-  }).join("") || '<li class="vazio">Tudo em dia. Um descanso também consolida memória.</li>';
+  }).join("") || `<li class="vazio">${
+    restam
+      ? "Meta do dia cumprida. Parar aqui é o que consolida — o resto está agendado."
+      : "Tudo em dia. Um descanso também consolida memória."
+  }</li>`;
 }
 
 function renderLista(ts) {

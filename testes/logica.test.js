@@ -11,6 +11,7 @@ import {
   SEMENTE, INTERVALOS,
   slug, idTema, ID_VALIDO, somaDias, diasEntre,
   derivar, eventosDoFormatoAntigo,
+  intervaloAjustado, metaDiaria, filaDeHoje, PADRAO_DIARIO,
 } from "../logica.js";
 
 const ALVO = idTema("Clínica Médica", "Tuberculose");
@@ -177,7 +178,7 @@ test("migração converte tema criado à mão e marca os apagados", () => {
   const criado = evs.find((e) => e.tipo === "tema+");
   assert.equal(criado.dados.tema, idTema("Cirurgia", "Tema Meu"));
 
-  // Todos os 74 da semente estavam ausentes, logo viram tombstone.
+  // Nenhum tema da semente estava presente, logo todos viram tombstone.
   assert.equal(evs.filter((e) => e.tipo === "tema-").length, SEMENTE.length);
 
   const d = derivar(evs);
@@ -192,4 +193,124 @@ test("migração tolera lixo sem lançar", () => {
     temas: [null, { nome: 123 }, { id: "t0", nome: "Síndromes coronarianas agudas", area: "Clínica Médica", historico: "nao-e-array" }],
   });
   assert.ok(Array.isArray(evs));
+});
+
+/* ---------- a prova aperta o ritmo ---------- */
+
+test("sem prova marcada os intervalos são os da escada", () => {
+  INTERVALOS.forEach((v, e) => assert.equal(intervaloAjustado(e, "2026-01-01", ""), v));
+});
+
+test("intervalo nunca passa da metade do tempo que falta", () => {
+  // Faltando 40 dias, o degrau de 90 marcaria a revisão para depois da prova.
+  assert.equal(intervaloAjustado(3, "2026-01-01", somaDias("2026-01-01", 40)), 20);
+  assert.equal(intervaloAjustado(2, "2026-01-01", somaDias("2026-01-01", 40)), 20);
+  assert.equal(intervaloAjustado(1, "2026-01-01", somaDias("2026-01-01", 40)), 7);
+});
+
+test("com prova distante nada é encurtado", () => {
+  assert.equal(intervaloAjustado(3, "2026-01-01", somaDias("2026-01-01", 365)), 90);
+});
+
+test("na véspera ainda sobra uma revisão", () => {
+  assert.equal(intervaloAjustado(3, "2026-01-01", somaDias("2026-01-01", 1)), 1);
+  assert.equal(intervaloAjustado(3, "2026-01-01", somaDias("2026-01-01", 2)), 1);
+});
+
+test("depois da prova volta ao ritmo normal", () => {
+  assert.equal(intervaloAjustado(3, "2026-06-01", "2026-01-01"), 90);
+});
+
+test("nenhuma revisão é agendada para depois da prova", () => {
+  const prova = "2026-03-01";
+  const evs = [
+    { id: "p", tipo: "prova", ts: "2026-01-01T00:00:00.000Z", dados: { nome: "X", data: prova } },
+    estudo(ALVO, "2026-01-20", 95),
+  ];
+  const t = acha(derivar(evs), ALVO);
+  assert.ok(t.proxima <= prova, `revisão em ${t.proxima} cairia depois da prova (${prova})`);
+});
+
+test("mudar a data da prova reprograma a revisão", () => {
+  const base = estudo(ALVO, "2026-01-20", 95);
+  const longe = derivar([base, { id: "p", tipo: "prova", ts: "2026-01-01T00:00:00.000Z", dados: { nome: "X", data: "2027-01-01" } }]);
+  // 8 dias até a prova: metade disso (4) é menor que o degrau de 7.
+  const perto = derivar([base, { id: "p", tipo: "prova", ts: "2026-01-01T00:00:00.000Z", dados: { nome: "X", data: "2026-01-28" } }]);
+  assert.equal(acha(longe, ALVO).proxima, "2026-01-27");
+  assert.equal(acha(perto, ALVO).proxima, "2026-01-24");
+});
+
+/* ---------- carga do dia ---------- */
+
+const temaFalso = (id, { historico = [], proxima = null } = {}) =>
+  ({ id, area: "A", nome: id, peso: 2, etapa: 0, proxima, historico });
+
+test("sem prova, a meta é o passo padrão", () => {
+  const hj = "2026-05-10";
+  const temas = [
+    temaFalso("a/1", { historico: [{ d: "2026-05-01", a: 90 }], proxima: "2026-05-05" }),  // atrasado
+    temaFalso("a/2", { historico: [{ d: "2026-05-03", a: 90 }], proxima: hj }),            // vence hoje
+    temaFalso("a/3"),                                                                       // nunca visto
+  ];
+  assert.equal(metaDiaria(temas, "", hj), PADRAO_DIARIO);
+});
+
+test("sem prova, um backlog maior que o passo padrão manda na meta", () => {
+  const hj = "2026-05-10";
+  const temas = Array.from({ length: 9 }, (_, i) =>
+    temaFalso(`a/${i}`, { historico: [{ d: "2026-04-01", a: 90 }], proxima: "2026-05-01" }));
+  assert.equal(metaDiaria(temas, "", hj), 9);
+});
+
+test("instalação nova sem prova ainda sugere o que estudar", () => {
+  const hj = "2026-05-10";
+  const temas = Array.from({ length: 75 }, (_, i) => temaFalso(`a/${i}`));
+  const f = filaDeHoje(temas, "", hj);
+  assert.equal(f.itens.length, PADRAO_DIARIO, "a fila não pode abrir vazia");
+});
+
+test("com prova, a meta inclui a fatia diária dos temas nunca vistos", () => {
+  const hj = "2026-05-10";
+  const temas = Array.from({ length: 20 }, (_, i) => temaFalso(`a/${i}`));
+  // 20 temas para 10 dias = 2 por dia.
+  assert.equal(metaDiaria(temas, somaDias(hj, 10), hj), 2);
+  // O mesmo backlog em 5 dias exige o dobro por dia.
+  assert.equal(metaDiaria(temas, somaDias(hj, 5), hj), 4);
+});
+
+test("a fila encolhe conforme o dia é cumprido", () => {
+  const hj = "2026-05-10";
+  const temas = Array.from({ length: 20 }, (_, i) => temaFalso(`a/${i}`));
+  const antes = filaDeHoje(temas, somaDias(hj, 10), hj);
+  assert.equal(antes.meta, 2);
+  assert.equal(antes.itens.length, 2);
+  assert.equal(antes.feitos, 0);
+
+  temas[0].historico.push({ d: hj, a: 90 });
+  const depois = filaDeHoje(temas, somaDias(hj, 10), hj);
+  assert.equal(depois.feitos, 1);
+  assert.equal(depois.itens.length, 1, "sobra um para fechar a meta do dia");
+
+  temas[1].historico.push({ d: hj, a: 90 });
+  assert.equal(filaDeHoje(temas, somaDias(hj, 10), hj).itens.length, 0, "meta cumprida, fila vazia");
+});
+
+test("a fila não esconde o tamanho do buraco", () => {
+  const hj = "2026-05-10";
+  // Doze revisões atrasadas: a fila fixa de cinco mostrava só cinco.
+  const temas = Array.from({ length: 12 }, (_, i) =>
+    temaFalso(`a/${i}`, { historico: [{ d: "2026-04-01", a: 90 }], proxima: "2026-05-01" }));
+  const f = filaDeHoje(temas, "", hj);
+  assert.equal(f.meta, 12);
+  assert.equal(f.itens.length, 12);
+});
+
+test("temas atrasados vêm antes dos nunca vistos", () => {
+  const hj = "2026-05-10";
+  const temas = [
+    temaFalso("a/novo"),
+    temaFalso("a/atrasado", { historico: [{ d: "2026-04-01", a: 50 }], proxima: "2026-04-20" }),
+  ];
+  const f = filaDeHoje(temas, "", hj);
+  assert.equal(f.itens[0].id, "a/atrasado");
 });

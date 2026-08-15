@@ -125,12 +125,27 @@ export function prioridade(t, hj = hoje()) {
 }
 
 /* ---------- revisão espaçada ---------- */
-export function aplicarEstudo(t, data, acertos) {
+
+/** Intervalo da etapa, encurtado quando a prova está perto.
+ *
+ * Uma revisão marcada para depois da prova é uma revisão que não acontece:
+ * a 40 dias do dia, o degrau de 90 significa "nunca mais". Metade do tempo
+ * restante garante mais de uma passada antes da data, e o encurtamento se
+ * acentua sozinho conforme a prova chega. */
+export function intervaloAjustado(etapa, data, dataProva) {
+  const base = INTERVALOS[etapa];
+  if (!dataProva) return base;
+  const restantes = diasEntre(data, dataProva);
+  if (restantes <= 0) return base;           // prova já passou: volta ao ritmo normal
+  return Math.max(1, Math.min(base, Math.floor(restantes / 2)));
+}
+
+export function aplicarEstudo(t, data, acertos, dataProva = "") {
   t.historico.push({ d: data, a: acertos });
   if (acertos >= 80) t.etapa = Math.min(t.etapa + 1, INTERVALOS.length - 1);
   else if (acertos < 60) t.etapa = 0;   // abaixo de 60% reinicia o ciclo
   // entre 60 e 79 consolida: mantém a etapa atual
-  t.proxima = somaDias(data, INTERVALOS[t.etapa]);
+  t.proxima = somaDias(data, intervaloAjustado(t.etapa, data, dataProva));
 }
 
 /* ---------- derivação ----------
@@ -174,12 +189,49 @@ export function derivar(eventos) {
     .sort((a, b) =>
       a.dados.data < b.dados.data ? -1 : a.dados.data > b.dados.data ? 1
       : a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+  // A prova vale para todo o replay: `proxima` deve refletir a data que
+  // está valendo hoje, não a que estava marcada quando o estudo aconteceu.
   for (const ev of estudos) {
     const t = catalogo.get(ev.dados.tema);
-    if (t) aplicarEstudo(t, ev.dados.data, ev.dados.acertos);
+    if (t) aplicarEstudo(t, ev.dados.data, ev.dados.acertos, prova.data);
   }
 
   return { prova, temas: [...catalogo.values()].filter((t) => !removidos.has(t.id)) };
+}
+
+/* ---------- carga do dia ----------
+   A fila era fixa em cinco temas. Com doze revisões atrasadas ela escondia
+   o tamanho do buraco, e sem prova marcada não dizia nada sobre ritmo. */
+
+/** Sem prova marcada não há prazo de onde derivar ritmo, então vale um passo
+ *  fixo — o mesmo que a fila mostrava antes de existir meta. */
+export const PADRAO_DIARIO = 5;
+
+/** Quantos temas precisam sair hoje: as revisões vencidas, mais a fatia dos
+ *  temas ainda não vistos que cabe no tempo que sobra até a prova. */
+export function metaDiaria(temas, dataProva, hj = hoje()) {
+  const atrasados = temas.filter((t) => { const a = atraso(t, hj); return a !== null && a > 0; }).length;
+  const vencemHoje = temas.filter((t) => atraso(t, hj) === 0).length;
+  const nuncaVistos = temas.filter((t) => !t.historico.length).length;
+  const vencidas = atrasados + vencemHoje;
+
+  const restantes = dataProva ? diasEntre(hj, dataProva) : 0;
+  if (restantes <= 0) return Math.max(dataProva ? 1 : PADRAO_DIARIO, vencidas);
+
+  return Math.max(1, vencidas + Math.ceil(nuncaVistos / restantes));
+}
+
+/** A fila de hoje, já descontando o que você registrou hoje.
+ *  Devolve também a meta e o quanto já foi feito, para a tela poder dizer
+ *  "faltam 3" em vez de só listar. */
+export function filaDeHoje(temas, dataProva, hj = hoje()) {
+  const meta = metaDiaria(temas, dataProva, hj);
+  const feitos = temas.filter((t) => ultimo(t)?.d === hj).length;
+  const pendentes = temas
+    .filter((t) => ultimo(t)?.d !== hj)
+    .sort((a, b) => prioridade(b, hj) - prioridade(a, hj));
+
+  return { meta, feitos, itens: pendentes.slice(0, Math.max(0, meta - feitos)), restam: pendentes.length };
 }
 
 /* ---------- migração do formato antigo ----------
