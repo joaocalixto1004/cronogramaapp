@@ -71,6 +71,15 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .ghost{background:none;border:1px solid var(--rule);border-radius:var(--r);padding:5px 10px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
 .ghost:hover{border-color:var(--azul);color:var(--azul)}
 
+.topo-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.counter .lbl .seguinte{color:var(--ink-3);font-size:11.5px;margin-top:2px}
+.fase{align-self:flex-end;margin-bottom:8px;
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--rule);border-radius:20px;padding:3px 11px;color:var(--ink-2);white-space:nowrap}
+.fase[data-fase="reta-final"]{border-color:var(--vermelho);color:var(--vermelho)}
+.fase[data-fase="aprofundamento"]{border-color:var(--ambar);color:var(--ambar)}
+.fase[data-fase="cobertura"]{border-color:var(--azul);color:var(--azul)}
+
 /* ---------- métricas ---------- */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:30px}
 .stat{background:var(--paper-2);padding:12px 14px}
@@ -80,6 +89,13 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .today{background:var(--ink);color:var(--paper-2);border-radius:var(--r);padding:18px var(--pad);margin-bottom:32px}
 .today h2{font-size:15px;color:#fff}
 .today .eyebrow{color:#8FAEB9}
+.hoje-topo{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.hoje-topo .mono{font-size:12px;color:#8FAEB9}
+.barra-dia{height:4px;background:#24404C;border-radius:2px;margin-top:12px;overflow:hidden}
+.barra-dia i{display:block;height:100%;width:0;background:#2E93B8;border-radius:2px}
+.queue .min{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#8FAEB9;white-space:nowrap}
+.queue .motivo{font-size:11px;color:#8FAEB9;display:none}
+@media(min-width:760px){.queue .motivo{display:block}}
 .queue{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:1px}
 .queue li{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid #24404C}
 .queue .tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:2px;white-space:nowrap}
@@ -158,6 +174,22 @@ dialog::backdrop{background:rgba(18,38,47,.42)}
 label{display:block;font-size:12px;font-family:"IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin:14px 0 5px}
 input,select{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--r);background:#fff;color:var(--ink)}
 input[type=range]{padding:0}
+.dupla{display:flex;align-items:center;gap:8px}
+.dupla input{flex:1;min-width:0}
+.dupla output{font-family:"IBM Plex Mono",monospace;font-size:18px;font-weight:600;min-width:56px;text-align:right}
+
+/* lista de provas dentro do diálogo */
+.provas{list-style:none;margin:0 0 4px;padding:0;display:flex;flex-direction:column;gap:1px}
+.provas li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13.5px}
+.provas .quando{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+.provas .qual{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.provas .vazia{color:var(--ink-3);font-size:12.5px;border:0;padding:4px 0}
+
+/* grade de minutos por dia da semana */
+.semana{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:6px}
+.semana label{margin:0 0 4px;text-align:center;font-size:10.5px;letter-spacing:.06em}
+.semana input{padding:6px 4px;text-align:center;font-size:13px}
+
 .acertos{display:flex;align-items:center;gap:12px}
 .acertos output{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;min-width:60px}
 .hint{font-size:12px;color:var(--ink-2);background:var(--azul-claro);border-left:2px solid var(--azul);padding:8px 10px;margin-top:12px}

@@ -29,6 +29,10 @@ Registrar um estudo grava local e devolve o controle na hora — a tela nunca es
 O que ainda não subiu fica marcado como pendente e sobrevive a fechar o app; o envio
 acontece sozinho quando há sinal. O rodapé mostra o estado.
 
+**Provas e rotina** também são eventos: cadastrar uma prova, removê-la ou mudar a
+rotina da semana entram no log como qualquer outra coisa, e por isso chegam sozinhos
+nos outros aparelhos.
+
 **Desfazer.** Registrar no tema errado e remover um tema acontecem na hora, sem caixa de
 confirmação, e ficam desfazíveis por alguns segundos no aviso que aparece no rodapé.
 Como o log não admite apagar, desfazer acrescenta um evento que anula o anterior — o que
@@ -131,20 +135,46 @@ Abra o endereço no Chrome ou Safari → menu → **Adicionar à tela de início
 
 ## Como o cronograma funciona
 
-**Fila de hoje** — a meta do dia: o que já venceu, mais a fatia dos temas ainda não
-vistos que cabe no tempo que falta até a prova. A fila encolhe conforme você cumpre, e
-avisa quando zera em vez de sugerir mais. Sem prova marcada, um passo fixo de 5.
+O app é montado para duas provas com calendários diferentes: **ENAMED**, meados de
+setembro, e **SES-DF**, dezembro/janeiro. Tudo — contagem, ritmo das revisões e peso dos
+temas — segue sempre a **prova mais próxima que ainda não passou**. Quando o ENAMED
+passa, o alvo vira a SES-DF sozinho, sem você mexer em nada.
 
-A ordem dentro da fila vem da prioridade:
+### Rotina
 
-```
-prioridade = incidência na prova  ×10
-           + lacuna de desempenho (quanto pior o último acerto, mais sobe)
-           + urgência da revisão   (dias de atraso desde a data prevista)
-```
+Você declara quantos minutos tem em cada dia da semana. É daqui que sai o tamanho do
+plano diário — e só daqui. Um dia com zero minutos é dia de descanso, não dívida.
 
-**Revisão espaçada** — ao registrar um estudo você informa o % de acertos, e o intervalo
-até a próxima revisão se ajusta:
+### Ciclo, não calendário
+
+O plano do dia não é uma grade com horário marcado. É um ciclo: os blocos saem da
+prioridade do momento, com **rodízio de área** — não repete área enquanto houver outra
+elegível. Duas consequências:
+
+- **Interleaving de graça.** Alternar assuntos é uma das poucas técnicas com evidência
+  boa em educação médica, e aqui ela é o padrão em vez de disciplina sua.
+- **Semana ruim não quebra nada.** Como o ciclo não guarda posição, um dia perdido não
+  desalinha o resto — no dia seguinte o atraso simplesmente entra na conta da prioridade.
+
+A duração de cada bloco é a **mediana do que você já gastou naquele tema**. Os 45 minutos
+iniciais são só um chute até haver histórico.
+
+### Fases
+
+A fase é derivada da distância até a prova, não configurada — o que muda o certo a fazer
+é o tempo restante, não a sua vontade:
+
+| Fase | Quando | O que muda |
+|---|---|---|
+| Cobertura | mais de 365 dias | tema nunca visto sobe na fila; prioridade é fechar a primeira passada |
+| Consolidação | 180 a 365 dias | equilíbrio entre revisão vencida e tema novo |
+| Aprofundamento | 60 a 180 dias | desempenho fraco e alta incidência dominam |
+| Reta final | menos de 60 dias | **tema nunca visto sai do plano** — abrir assunto novo na véspera custa mais do que rende |
+
+### Revisão espaçada
+
+Ao registrar, você informa quantas questões fez e quantas acertou; o percentual sai da
+contagem. Sem questões, dá para estimar o domínio no controle deslizante.
 
 | Acertos | O que acontece | Próxima revisão |
 |---|---|---|
@@ -152,17 +182,23 @@ até a próxima revisão se ajusta:
 | 60–79% | mantém o degrau | repete o intervalo atual |
 | < 60% | reinicia o ciclo | no dia seguinte |
 
-Os estudos são reaplicados em ordem de **data de estudo**, não de registro — se você
-registrar hoje um estudo de anteontem, ele entra na posição cronológica certa.
+**A prova aperta o ritmo.** O intervalo nunca passa da metade do tempo que falta: a 40
+dias da prova, o degrau de 90 marcaria a revisão para depois dela — ou seja, nunca.
 
-**Traçado de retenção** — a curvinha à direita de cada tema mostra o histórico: cada estudo
-levanta a linha, e ela decai até a próxima revisão. Verde acima de 80%, âmbar entre 60 e 80,
-vermelho abaixo.
+Os estudos são reaplicados em ordem de **data de estudo**, não de registro. Registrar hoje
+um estudo de anteontem o coloca na posição cronológica certa.
 
-**Peso dos temas** — a bolinha antes do nome indica incidência: vermelha = alta, âmbar =
-média, cinza = baixa. Os 75 temas iniciais cobrem as cinco grandes áreas do acesso direto.
-Ajuste os pesos conforme o perfil da sua banca — quem faz ENARE e quem faz USP não tem a
-mesma distribuição.
+### Temas e pesos
+
+São 97 temas nas **sete áreas da Matriz de Referência do ENAMED** (Portaria INEP
+478/2025): as cinco grandes áreas clássicas mais **Medicina de Família e Comunidade** e
+**Saúde Mental**, que uma prova de acesso direto tradicional quase não cobra e o ENAMED
+cobra bastante.
+
+Cada tema tem **dois pesos**, um por perfil de prova, porque as duas não cobram a mesma
+coisa. A bolinha antes do nome mostra o peso do perfil da prova alvo — ela muda quando o
+alvo muda. Os pesos iniciais são editoriais: ajuste conforme for resolvendo questões e
+descobrindo o perfil de cada banca.
 
 ---
 
@@ -184,9 +220,10 @@ guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
 ## Desenvolvimento
 
 ```bash
-npm test                 # 52 testes de lógica e autenticação, sem dependências
+npm test                 # 66 testes de lógica e autenticação, sem dependências
 npm run db:local         # cria a tabela no D1 local
 npm run dev              # monta publico/ e sobe em http://localhost:8788
+                         # (o app é servido de publico/: rode build.sh depois de editar)
 ```
 
 Para rodar local é preciso um arquivo `.dev.vars` (já no `.gitignore`) com:
@@ -215,7 +252,7 @@ node testes/navegador/migracao.mjs
 ```
 index.html               markup
 estilo.css               estilos e fontes locais
-logica.js                catálogo, revisão espaçada, derivação  (puro, testável)
+logica.js                catálogo, provas, fases, ciclo e derivação  (puro, testável)
 sync.js                  fila offline e conversa com a API
 app.js                   render incremental e interações
 sw.js                    cache offline, versão carimbada no build

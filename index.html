@@ -19,14 +19,19 @@
 <header>
   <div class="brandrow">
     <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow">cronograma de residência</span></h1>
-    <button class="ghost" id="btnProva">ajustar prova</button>
+    <div class="topo-acoes">
+      <button class="ghost" id="btnRotina">rotina</button>
+      <button class="ghost" id="btnProvas">provas</button>
+    </div>
   </div>
   <div class="counter">
     <div class="num" id="dias">—</div>
     <div class="lbl">
       <div class="eyebrow">dias até <span id="provaNome">a prova</span></div>
       <p id="provaData"></p>
+      <p id="provaSeguinte" class="seguinte"></p>
     </div>
+    <span class="fase" id="chipFase" hidden></span>
   </div>
 </header>
 
@@ -34,12 +39,17 @@
   <div class="stat"><span class="eyebrow">temas cobertos</span><b id="stCob">0</b></div>
   <div class="stat"><span class="eyebrow">revisões atrasadas</span><b id="stAtr">0</b></div>
   <div class="stat"><span class="eyebrow">acertos médios</span><b id="stAce">—</b></div>
+  <div class="stat"><span class="eyebrow">questões</span><b id="stQst">0</b></div>
   <div class="stat"><span class="eyebrow">sequência</span><b id="stSeq">0</b></div>
 </section>
 
 <section class="today">
-  <span class="eyebrow">fila de hoje</span>
+  <div class="hoje-topo">
+    <span class="eyebrow">plano de hoje</span>
+    <span class="mono" id="hojeMinutos"></span>
+  </div>
   <h2 id="tituloFila">O que estudar agora</h2>
+  <div class="barra-dia" aria-hidden="true"><i id="barraDia"></i></div>
   <ul class="queue" id="fila"></ul>
 </section>
 
@@ -73,11 +83,25 @@
   <p class="sub" id="regArea"></p>
   <label for="regData">Data</label>
   <input type="date" id="regData">
-  <label for="regAcertos">Acertos nas questões</label>
-  <div class="acertos">
-    <input type="range" id="regAcertos" min="0" max="100" step="5" value="70">
-    <output id="regOut" class="mono">70%</output>
+
+  <label for="regQuestoes">Questões — feitas e certas</label>
+  <div class="dupla">
+    <input type="number" id="regQuestoes" min="0" max="2000" step="1" placeholder="feitas" inputmode="numeric">
+    <input type="number" id="regCertas" min="0" max="2000" step="1" placeholder="certas" inputmode="numeric">
+    <output id="regPct" class="mono">—</output>
   </div>
+
+  <div id="regSemQuestoes">
+    <label for="regAcertos">Sem questões? Estime o domínio</label>
+    <div class="acertos">
+      <input type="range" id="regAcertos" min="0" max="100" step="5" value="70">
+      <output id="regOut" class="mono">70%</output>
+    </div>
+  </div>
+
+  <label for="regMinutos">Minutos de estudo</label>
+  <input type="number" id="regMinutos" min="0" max="960" step="5" placeholder="45" inputmode="numeric">
+
   <div class="hint" id="regHint"></div>
   <div class="acoes">
     <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
@@ -106,15 +130,38 @@
   </div>
 </form></dialog>
 
-<!-- prova -->
-<dialog id="dlgProva"><form method="dialog" class="dlg">
+<!-- provas -->
+<dialog id="dlgProvas"><form method="dialog" class="dlg">
   <span class="eyebrow">alvo</span>
-  <h3>Sua prova</h3>
-  <p class="sub">A contagem e a priorização se ajustam a esta data.</p>
+  <h3>Suas provas</h3>
+  <p class="sub">A contagem, o encurtamento das revisões e o peso dos temas seguem sempre a
+    prova mais próxima que ainda não passou.</p>
+
+  <ul class="provas" id="listaProvas"></ul>
+
   <label for="pvNome">Banca ou instituição</label>
-  <input type="text" id="pvNome" placeholder="Ex.: USP, UNIFESP, ENARE" maxlength="80">
+  <input type="text" id="pvNome" placeholder="Ex.: ENAMED" maxlength="80">
   <label for="pvData">Data da prova</label>
   <input type="date" id="pvData">
+  <label for="pvPerfil">Perfil de cobrança</label>
+  <select id="pvPerfil">
+    <option value="enamed">ENAMED — sete áreas, peso em APS e saúde mental</option>
+    <option value="sesdf">Acesso direto — cinco grandes áreas</option>
+  </select>
+  <div class="acoes">
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>fechar</button>
+    <button class="btn" value="ok" type="submit">salvar prova</button>
+  </div>
+</form></dialog>
+
+<!-- rotina -->
+<dialog id="dlgRotina"><form method="dialog" class="dlg">
+  <span class="eyebrow">rotina</span>
+  <h3>Minutos por dia da semana</h3>
+  <p class="sub">É daqui que sai o tamanho do plano diário. Vale o realista — um número
+    que você cumpre vale mais que um que te faz abandonar o cronograma.</p>
+  <div class="semana" id="semana"></div>
+  <p class="sub mono" id="rotinaTotal"></p>
   <div class="acoes">
     <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
     <button class="btn" value="ok" type="submit">salvar</button>

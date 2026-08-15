@@ -11,7 +11,8 @@ import {
   SEMENTE, INTERVALOS,
   slug, idTema, ID_VALIDO, somaDias, diasEntre,
   derivar, eventosDoFormatoAntigo,
-  intervaloAjustado, metaDiaria, filaDeHoje, PADRAO_DIARIO,
+  intervaloAjustado, planoDoDia, provaAlvo, fase, pesoDe, prioridade, normalizarRegistro,
+  ROTINA_PADRAO, BLOCO_PADRAO,
 } from "../logica.js";
 
 const ALVO = idTema("Clínica Médica", "Tuberculose");
@@ -127,7 +128,11 @@ test("prova é decidida pelo evento mais recente", () => {
     { id: "p2", tipo: "prova", ts: "2026-02-01T00:00:00.000Z", dados: { nome: "ENARE", data: "2026-11-01" } },
     { id: "p1", tipo: "prova", ts: "2026-01-01T00:00:00.000Z", dados: { nome: "USP", data: "2026-12-01" } },
   ];
-  assert.deepEqual(derivar(evs).prova, { nome: "ENARE", data: "2026-11-01" });
+  const ps = derivar(evs).provas;
+  assert.equal(ps.length, 1, "sem id, os dois eventos falam da mesma prova");
+  assert.equal(ps[0].nome, "ENARE");
+  assert.equal(ps[0].data, "2026-11-01");
+  assert.equal(ps[0].prova, "principal", "evento antigo sem id vira a prova principal");
 });
 
 test("estudo em tema desconhecido é ignorado, não quebra", () => {
@@ -152,8 +157,9 @@ test("migração preserva o histórico e cola no tema certo", () => {
   const t = acha(d, ALVO);
 
   assert.equal(t.nome, "Tuberculose");
-  assert.deepEqual(t.historico, [{ d: "2026-01-01", a: 90 }, { d: "2026-01-08", a: 85 }]);
-  assert.deepEqual(d.prova, { nome: "USP", data: "2026-11-15" });
+  assert.deepEqual(t.historico.map((h) => [h.d, h.a]), [["2026-01-01", 90], ["2026-01-08", 85]]);
+  assert.equal(d.provas[0].nome, "USP");
+  assert.equal(d.provas[0].data, "2026-11-15");
   assert.equal(d.temas.length, SEMENTE.length);
 });
 
@@ -240,81 +246,6 @@ test("mudar a data da prova reprograma a revisão", () => {
   assert.equal(acha(perto, ALVO).proxima, "2026-01-24");
 });
 
-/* ---------- carga do dia ---------- */
-
-const temaFalso = (id, { historico = [], proxima = null } = {}) =>
-  ({ id, area: "A", nome: id, peso: 2, etapa: 0, proxima, historico });
-
-test("sem prova, a meta é o passo padrão", () => {
-  const hj = "2026-05-10";
-  const temas = [
-    temaFalso("a/1", { historico: [{ d: "2026-05-01", a: 90 }], proxima: "2026-05-05" }),  // atrasado
-    temaFalso("a/2", { historico: [{ d: "2026-05-03", a: 90 }], proxima: hj }),            // vence hoje
-    temaFalso("a/3"),                                                                       // nunca visto
-  ];
-  assert.equal(metaDiaria(temas, "", hj), PADRAO_DIARIO);
-});
-
-test("sem prova, um backlog maior que o passo padrão manda na meta", () => {
-  const hj = "2026-05-10";
-  const temas = Array.from({ length: 9 }, (_, i) =>
-    temaFalso(`a/${i}`, { historico: [{ d: "2026-04-01", a: 90 }], proxima: "2026-05-01" }));
-  assert.equal(metaDiaria(temas, "", hj), 9);
-});
-
-test("instalação nova sem prova ainda sugere o que estudar", () => {
-  const hj = "2026-05-10";
-  const temas = Array.from({ length: 75 }, (_, i) => temaFalso(`a/${i}`));
-  const f = filaDeHoje(temas, "", hj);
-  assert.equal(f.itens.length, PADRAO_DIARIO, "a fila não pode abrir vazia");
-});
-
-test("com prova, a meta inclui a fatia diária dos temas nunca vistos", () => {
-  const hj = "2026-05-10";
-  const temas = Array.from({ length: 20 }, (_, i) => temaFalso(`a/${i}`));
-  // 20 temas para 10 dias = 2 por dia.
-  assert.equal(metaDiaria(temas, somaDias(hj, 10), hj), 2);
-  // O mesmo backlog em 5 dias exige o dobro por dia.
-  assert.equal(metaDiaria(temas, somaDias(hj, 5), hj), 4);
-});
-
-test("a fila encolhe conforme o dia é cumprido", () => {
-  const hj = "2026-05-10";
-  const temas = Array.from({ length: 20 }, (_, i) => temaFalso(`a/${i}`));
-  const antes = filaDeHoje(temas, somaDias(hj, 10), hj);
-  assert.equal(antes.meta, 2);
-  assert.equal(antes.itens.length, 2);
-  assert.equal(antes.feitos, 0);
-
-  temas[0].historico.push({ d: hj, a: 90 });
-  const depois = filaDeHoje(temas, somaDias(hj, 10), hj);
-  assert.equal(depois.feitos, 1);
-  assert.equal(depois.itens.length, 1, "sobra um para fechar a meta do dia");
-
-  temas[1].historico.push({ d: hj, a: 90 });
-  assert.equal(filaDeHoje(temas, somaDias(hj, 10), hj).itens.length, 0, "meta cumprida, fila vazia");
-});
-
-test("a fila não esconde o tamanho do buraco", () => {
-  const hj = "2026-05-10";
-  // Doze revisões atrasadas: a fila fixa de cinco mostrava só cinco.
-  const temas = Array.from({ length: 12 }, (_, i) =>
-    temaFalso(`a/${i}`, { historico: [{ d: "2026-04-01", a: 90 }], proxima: "2026-05-01" }));
-  const f = filaDeHoje(temas, "", hj);
-  assert.equal(f.meta, 12);
-  assert.equal(f.itens.length, 12);
-});
-
-test("temas atrasados vêm antes dos nunca vistos", () => {
-  const hj = "2026-05-10";
-  const temas = [
-    temaFalso("a/novo"),
-    temaFalso("a/atrasado", { historico: [{ d: "2026-04-01", a: 50 }], proxima: "2026-04-20" }),
-  ];
-  const f = filaDeHoje(temas, "", hj);
-  assert.equal(f.itens[0].id, "a/atrasado");
-});
-
 /* ---------- desfazer ---------- */
 
 test("estudo anulado some do histórico e devolve a etapa anterior", () => {
@@ -327,7 +258,7 @@ test("estudo anulado some do histórico e devolve a etapa anterior", () => {
   const anulado = { id: "an", tipo: "estudo-", ts: "2026-01-05T12:00:00.000Z", dados: { evento: errado.id } };
   const t = acha(derivar([bom, errado, anulado]), ALVO);
   assert.equal(t.historico.length, 1, "o registro errado sai do histórico");
-  assert.deepEqual(t.historico[0], { d: "2026-01-01", a: 90 });
+  assert.deepEqual([t.historico[0].d, t.historico[0].a], ["2026-01-01", 90]);
   assert.equal(t.etapa, 1, "a etapa volta a ser a que era antes do erro");
 });
 
@@ -358,4 +289,214 @@ test("remover e desfazer devolve o tema com o histórico intacto", () => {
   const t = acha(derivar(desfeito), ALVO);
   assert.ok(t, "o tema volta");
   assert.equal(t.historico.length, 1, "e o histórico volta com ele");
+});
+
+/* ---------- retrocompatibilidade ---------- */
+
+const ENAMED = { prova: "enamed", nome: "ENAMED", data: "2028-09-13", perfil: "enamed" };
+const SESDF = { prova: "sesdf", nome: "SES-DF", data: "2029-01-11", perfil: "sesdf" };
+const evProva = (p, ts) => ({ id: "p:" + p.prova, tipo: "prova", ts, dados: p });
+
+test("evento de estudo no formato antigo continua valendo", () => {
+  const t = acha(derivar([estudo(ALVO, "2026-01-01", 90)]), ALVO);
+  assert.equal(t.historico[0].a, 90);
+  assert.equal(t.historico[0].q, null, "sem volume, o campo fica nulo em vez de mentir");
+});
+
+test("percentual sai da contagem quando ela existe", () => {
+  const h = normalizarRegistro({ data: "2026-01-01", questoes: 40, certas: 30, minutos: 50 });
+  assert.equal(h.a, 75);
+  assert.equal(h.q, 40);
+  assert.equal(h.m, 50);
+});
+
+test("contagem e percentual antigo produzem o mesmo desempenho", () => {
+  const contagem = normalizarRegistro({ data: "2026-01-01", questoes: 10, certas: 7 });
+  const antigo = normalizarRegistro({ data: "2026-01-01", acertos: 70 });
+  assert.equal(contagem.a, antigo.a);
+});
+
+test("tema+ com peso único vale para os dois perfis", () => {
+  const id = idTema("Cirurgia", "Tema Meu");
+  const d = derivar([{
+    id: "a", tipo: "tema+", ts: "2026-01-01T00:00:00.000Z",
+    dados: { tema: id, nome: "Tema Meu", area: "Cirurgia", peso: 3 },
+  }]);
+  const t = acha(d, id);
+  assert.equal(pesoDe(t, "enamed"), 3);
+  assert.equal(pesoDe(t, "sesdf"), 3);
+});
+
+test("as sete áreas do ENAMED existem no catálogo", () => {
+  const areas = new Set(SEMENTE.map(([a]) => a));
+  for (const a of ["Medicina de Família e Comunidade", "Saúde Mental"]) {
+    assert.ok(areas.has(a), `falta a área ${a}`);
+  }
+  assert.equal(areas.size, 7);
+});
+
+test("todo tema da semente tem os dois pesos entre 1 e 3", () => {
+  for (const [area, nome, e, s] of SEMENTE) {
+    assert.ok([1, 2, 3].includes(e), `peso ENAMED inválido em ${nome}`);
+    assert.ok([1, 2, 3].includes(s), `peso SES-DF inválido em ${nome}`);
+    assert.ok(ID_VALIDO.test(idTema(area, nome)), `id inválido: ${nome}`);
+  }
+  assert.equal(new Set(SEMENTE.map(([a, n]) => idTema(a, n))).size, SEMENTE.length);
+});
+
+/* ---------- provas múltiplas ---------- */
+
+test("a prova alvo é a próxima ainda não realizada", () => {
+  const provas = [ENAMED, SESDF];
+  assert.equal(provaAlvo(provas, "2027-01-01").prova, "enamed");
+  assert.equal(provaAlvo(provas, "2028-09-13").prova, "enamed", "no dia ainda vale");
+  assert.equal(provaAlvo(provas, "2028-09-14").prova, "sesdf", "passou o ENAMED, vira SES-DF");
+  assert.equal(provaAlvo(provas, "2029-02-01"), null);
+});
+
+test("prova sem data não vira alvo", () => {
+  assert.equal(provaAlvo([{ prova: "x", nome: "X", data: "" }], "2027-01-01"), null);
+});
+
+test("prova- remove só a prova indicada", () => {
+  const d = derivar([
+    evProva(ENAMED, "2026-01-01T00:00:00.000Z"),
+    evProva(SESDF, "2026-01-01T00:00:01.000Z"),
+    { id: "r", tipo: "prova-", ts: "2026-02-01T00:00:00.000Z", dados: { prova: "sesdf" } },
+  ]);
+  assert.deepEqual(d.provas.map((p) => p.prova), ["enamed"]);
+});
+
+test("o peso usado muda com o perfil da prova alvo", () => {
+  // MFC pesa 3 no ENAMED e 1 na SES-DF; o inverso vale para hemorragia digestiva.
+  const mfc = idTema("Medicina de Família e Comunidade", "Método clínico centrado na pessoa");
+  const d = derivar([]);
+  const t = d.temas.find((x) => x.id === mfc);
+  assert.ok(prioridade(t, "2027-01-01", ENAMED) > prioridade(t, "2027-01-01", SESDF));
+});
+
+test("depois do ENAMED as revisões passam a mirar a SES-DF", () => {
+  // Estudo 40 dias antes da SES-DF: o intervalo tem de encurtar por causa dela.
+  const evs = [
+    evProva(ENAMED, "2026-01-01T00:00:00.000Z"),
+    evProva(SESDF, "2026-01-01T00:00:01.000Z"),
+    estudo(ALVO, "2028-12-02", 95),
+  ];
+  const t = acha(derivar(evs), ALVO);
+  assert.ok(t.proxima <= SESDF.data, `revisão em ${t.proxima} cairia depois da SES-DF`);
+});
+
+/* ---------- fases ---------- */
+
+test("cada janela produz a fase certa", () => {
+  assert.equal(fase(400), "cobertura");
+  assert.equal(fase(366), "cobertura");
+  assert.equal(fase(365), "consolidacao");
+  assert.equal(fase(181), "consolidacao");
+  assert.equal(fase(180), "aprofundamento");
+  assert.equal(fase(61), "aprofundamento");
+  assert.equal(fase(60), "reta-final");
+  assert.equal(fase(0), "reta-final");
+  assert.equal(fase(null), "livre");
+});
+
+/* ---------- plano do dia ---------- */
+
+const temaFalso = (id, area, extra = {}) => ({
+  id, area, nome: id, pesos: { enamed: 2, sesdf: 2 },
+  etapa: 0, proxima: null, historico: [], ...extra,
+});
+// 2026-05-11 é uma segunda-feira.
+const SEG = "2026-05-11";
+
+test("o plano preenche os minutos do dia sem estourar", () => {
+  const temas = Array.from({ length: 20 }, (_, i) => temaFalso(`a/${i}`, "Área " + (i % 4)));
+  const p = planoDoDia(temas, [0, 120, 0, 0, 0, 0, 0], [], SEG);
+  const soma = p.blocos.reduce((s, b) => s + b.minutos, 0);
+  assert.equal(p.minutosDisponiveis, 120);
+  assert.ok(soma <= 120, `plano somou ${soma} min para 120 disponíveis`);
+  assert.equal(soma, 120, "com 45 min de bloco padrão, 120 fecha em 45+45+30");
+});
+
+test("dia sem horas devolve plano vazio sem quebrar", () => {
+  const temas = [temaFalso("a/1", "X")];
+  const p = planoDoDia(temas, [0, 0, 0, 0, 0, 0, 0], [], SEG);
+  assert.equal(p.minutosDisponiveis, 0);
+  assert.deepEqual(p.blocos, []);
+});
+
+test("não repete área em sequência enquanto houver alternativa", () => {
+  const temas = [
+    ...Array.from({ length: 5 }, (_, i) => temaFalso(`cm/${i}`, "Clínica Médica")),
+    temaFalso("cir/1", "Cirurgia"),
+    temaFalso("ped/1", "Pediatria"),
+  ];
+  const p = planoDoDia(temas, [0, 240, 0, 0, 0, 0, 0], [], SEG);
+  assert.ok(p.blocos.length >= 4, "precisa de blocos suficientes para testar o rodízio");
+  for (let i = 1; i < p.blocos.length; i++) {
+    const [ant, at] = [p.blocos[i - 1].tema.area, p.blocos[i].tema.area];
+    if (ant === at) {
+      // só é aceitável se não sobrava nenhuma outra área não usada
+      const usadas = new Set(p.blocos.slice(0, i).map((b) => b.tema.id));
+      const outras = temas.filter((t) => !usadas.has(t.id) && t.area !== ant);
+      assert.equal(outras.length, 0, `repetiu ${at} havendo ${outras.length} alternativas`);
+    }
+  }
+});
+
+test("o bloco usa a duração que o tema costuma consumir", () => {
+  const lento = temaFalso("a/lento", "X", {
+    historico: [{ d: "2026-01-01", a: 80, q: 20, c: 16, m: 90 },
+                { d: "2026-02-01", a: 80, q: 20, c: 16, m: 90 }],
+    proxima: "2026-01-02",
+  });
+  const p = planoDoDia([lento], [0, 180, 0, 0, 0, 0, 0], [], SEG);
+  assert.equal(p.blocos[0].minutos, 90, "mediana do histórico, não o padrão");
+  assert.equal(planoDoDia([temaFalso("a/novo", "X")], [0, 180, 0, 0, 0, 0, 0], [], SEG).blocos[0].minutos, BLOCO_PADRAO);
+});
+
+test("o que já foi estudado hoje desconta dos minutos e sai da fila", () => {
+  const feito = temaFalso("a/feito", "X", { historico: [{ d: SEG, a: 90, q: 10, c: 9, m: 60 }] });
+  const p = planoDoDia([feito, temaFalso("a/outro", "Y")], [0, 120, 0, 0, 0, 0, 0], [], SEG);
+  assert.equal(p.minutosFeitos, 60);
+  assert.equal(p.questoesHoje, 10);
+  assert.ok(!p.blocos.some((b) => b.tema.id === "a/feito"), "não repete no mesmo dia");
+  // Só resta um tema elegível, logo um bloco de 45 — os 15 restantes não viram bloco.
+  assert.equal(p.blocos.reduce((s, b) => s + b.minutos, 0), BLOCO_PADRAO);
+  assert.equal(p.sobra, 120 - 60 - BLOCO_PADRAO);
+});
+
+test("na reta final tema nunca visto sai do plano", () => {
+  const visto = temaFalso("a/visto", "X", { historico: [{ d: "2028-08-01", a: 70, q: 10, c: 7, m: 45 }], proxima: "2028-08-10" });
+  const novo = temaFalso("a/novo", "Y");
+  const perto = { prova: "p", nome: "P", data: somaDias(SEG, 30), perfil: "enamed" };
+
+  const reta = planoDoDia([visto, novo], [0, 240, 0, 0, 0, 0, 0], [perto], SEG);
+  assert.equal(reta.fase, "reta-final");
+  assert.ok(!reta.blocos.some((b) => b.tema.id === "a/novo"), "assunto novo não entra na véspera");
+
+  const longe = { prova: "p", nome: "P", data: somaDias(SEG, 500), perfil: "enamed" };
+  const cobertura = planoDoDia([visto, novo], [0, 240, 0, 0, 0, 0, 0], [longe], SEG);
+  assert.equal(cobertura.fase, "cobertura");
+  assert.ok(cobertura.blocos.some((b) => b.tema.id === "a/novo"), "na cobertura ele é prioridade");
+});
+
+test("cada bloco explica por que está ali", () => {
+  const atrasado = temaFalso("a/atrasado", "X", { historico: [{ d: "2026-04-01", a: 50 }], proxima: "2026-05-01" });
+  const p = planoDoDia([atrasado, temaFalso("a/novo", "Y")], [0, 120, 0, 0, 0, 0, 0], [], SEG);
+  assert.match(p.blocos[0].motivo, /revisão atrasada/);
+  assert.ok(p.blocos.every((b) => typeof b.motivo === "string" && b.motivo.length));
+});
+
+test("rotina inválida cai no padrão em vez de quebrar", () => {
+  for (const r of [null, undefined, [1, 2], "nao-e-array", [1,2,3,4,5,6,"x"]]) {
+    const p = planoDoDia([temaFalso("a/1", "X")], r, [], SEG);
+    assert.equal(p.minutosDisponiveis, ROTINA_PADRAO[1], `rotina ${JSON.stringify(r)} deveria cair no padrão`);
+  }
+});
+
+test("a rotina do log vale e é limitada a 16h por dia", () => {
+  const d = derivar([{ id: "r", tipo: "rotina", ts: "2026-01-01T00:00:00.000Z", dados: { minutos: [0, 90, 90, 90, 90, 90, 9999] } }]);
+  assert.equal(d.rotina[1], 90);
+  assert.equal(d.rotina[6], 16 * 60, "valor absurdo é aparado, não aceito");
 });

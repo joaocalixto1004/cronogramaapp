@@ -8,23 +8,33 @@
 
 import * as sync from "./sync.js";
 import {
-  INTERVALOS, AREAS, ID_VALIDO,
-  idTema, hoje, diasEntre, somaDias, fmt,
-  ultimo, desempenho, atraso, prioridade,
-  derivar, eventosDoFormatoAntigo, filaDeHoje,
+  INTERVALOS, AREAS, PERFIS, PERFIL_PADRAO, ID_VALIDO, NOME_FASE,
+  ROTINA_PADRAO, BLOCO_PADRAO,
+  slug, idTema, hoje, diasEntre, somaDias, fmt,
+  ultimo, desempenho, atraso, prioridade, pesoDe, questoesFeitas,
+  provaAlvo, fase, intervaloAjustado, duracaoTipica, planoDoDia,
+  derivar, eventosDoFormatoAntigo,
 } from "./logica.js";
 
 const CHAVE_ANTIGA = "ritmo.v1";
 const MARCA_MIGRACAO = "ritmo.migrado.v2";
+const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
 const $ = (id) => document.getElementById(id);
-// Não há mais escape de HTML neste arquivo: todo texto vindo do usuário entra
-// por textContent. O único innerHTML restante é o SVG do traço, gerado aqui.
+// Não há escape de HTML neste arquivo: todo texto vindo do usuário entra por
+// textContent. O único innerHTML restante é o SVG do traço, gerado aqui.
 
 /* ---------- estado de tela ---------- */
-let dados = { prova: { nome: "a prova", data: "" }, temas: [] };
+let dados = { provas: [], rotina: ROTINA_PADRAO, simulados: [], temas: [] };
+let alvo = null;                 // prova mais próxima ainda não realizada
 let filtro = "todos";
-let alvoId = null;
+let alvoId = null;               // tema aberto no diálogo de registro
+
+const horas = (min) => {
+  if (!min) return "0";
+  const h = Math.floor(min / 60), m = min % 60;
+  return h && m ? `${h}h${String(m).padStart(2, "0")}` : h ? `${h}h` : `${m}min`;
+};
 
 /* ---------- migração do formato antigo ---------- */
 function migrar() {
@@ -78,43 +88,9 @@ function tracado(t) {
     <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.6" stroke-linejoin="round"/>${pontos}</svg>`;
 }
 
-/* ---------- render ---------- */
-function render() {
-  const dias = dados.prova.data ? diasEntre(hoje(), dados.prova.data) : null;
-  $("dias").textContent = dias === null ? "—" : dias < 0 ? "0" : dias;
-  $("provaNome").textContent = dados.prova.nome || "a prova";
-  $("provaData").textContent = dados.prova.data
-    ? new Date(dados.prova.data + "T00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
-    : "Defina a data em “ajustar prova” para ver a contagem.";
-
-  const ts = dados.temas;
-  const cob = ts.filter((t) => t.historico.length).length;
-  const atr = ts.filter((t) => { const a = atraso(t); return a !== null && a > 0; }).length;
-  const notas = ts.map(desempenho).filter((n) => n !== null);
-  $("stCob").textContent = cob + "/" + ts.length;
-  $("stAtr").textContent = atr;
-  $("stAce").textContent = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) + "%" : "—";
-  $("stSeq").textContent = sequencia() + "d";
-
-  renderFila(ts);
-  renderLista(ts);
-}
-
-function sequencia() {
-  const dias = new Set(dados.temas.flatMap((t) => t.historico.map((h) => h.d)));
-  let n = 0, cursor = hoje();
-  if (!dias.has(cursor)) cursor = somaDias(cursor, -1); // o dia ainda não acabou
-  while (dias.has(cursor)) { n++; cursor = somaDias(cursor, -1); }
-  return n;
-}
-
 /* ---------- render incremental ----------
-   Antes, cada ação refazia o innerHTML da lista inteira: 75 linhas e 75 SVGs
-   reconstruídos para mudar uma. Agora cada tema tem um nó de DOM próprio,
-   reaproveitado entre renders, e só o que mudou é reescrito.
-
-   De quebra, o texto vindo do usuário passa a entrar por textContent em vez
-   de concatenação de HTML — não há mais o que escapar. */
+   Cada tema tem um nó de DOM próprio, reaproveitado entre renders: só o que
+   mudou é reescrito, em vez de refazer a lista inteira a cada ação. */
 
 const MOLDE_LINHA = document.createElement("template");
 MOLDE_LINHA.innerHTML =
@@ -131,13 +107,11 @@ MOLDE_AREA.innerHTML =
   `<h3></h3><div class="bar-prog"><i></i></div><span class="eyebrow"></span>` +
   `</div></section>`;
 
-const linhas = new Map();   // id do tema -> nó e assinaturas
-const blocos = new Map();   // área -> nó
+const linhas = new Map();
+const blocos = new Map();
 
-/* Assinaturas: o que precisa mudar na tela para a linha valer um retoque.
-   O traço tem a sua própria porque gerar o SVG é o passo caro. */
-const assinaturaLinha = (t, hj) =>
-  `${t.nome}|${t.area}|${t.peso}|${t.proxima}|${ultimo(t)?.d ?? ""}|${ultimo(t)?.a ?? ""}|${hj}`;
+const assinaturaLinha = (t, hj, perfil) =>
+  `${t.nome}|${t.area}|${pesoDe(t, perfil)}|${t.proxima}|${ultimo(t)?.d ?? ""}|${ultimo(t)?.a ?? ""}|${questoesFeitas(t)}|${hj}`;
 const assinaturaTraco = (t, hj) =>
   `${hj}|${t.historico.slice(-4).map((h) => h.d + ":" + h.a).join(",")}`;
 
@@ -159,24 +133,25 @@ function criarLinha(id) {
   };
 }
 
-/** Os trechos de "último X • Y% acertos • revisar Z" da linha. */
 function pedacosMeta(t) {
-  const d = desempenho(t), a = atraso(t), u = ultimo(t);
+  const d = desempenho(t), a = atraso(t), u = ultimo(t), q = questoesFeitas(t);
   const partes = [];
   if (u) partes.push(["", `último ${fmt(u.d)}`]);
   if (d !== null) partes.push([d >= 70 ? "ok" : "due", `${d}% acertos`]);
+  if (q) partes.push(["", `${q} questões`]);
   if (a !== null) partes.push(a > 0 ? ["due", `revisar — ${a}d atrás`] : ["", `revisar ${fmt(t.proxima)}`]);
   if (!partes.length) partes.push(["", "ainda não estudado"]);
   return partes;
 }
 
-function atualizarLinha(l, t, hj) {
-  const assin = assinaturaLinha(t, hj);
+function atualizarLinha(l, t, hj, perfil) {
+  const assin = assinaturaLinha(t, hj, perfil);
   if (l.assin === assin) return;
   l.assin = assin;
 
-  l.peso.className = `peso p${t.peso}`;
-  l.peso.title = `incidência ${t.peso}/3`;
+  const peso = Math.round(pesoDe(t, perfil));
+  l.peso.className = `peso p${peso}`;
+  l.peso.title = `incidência ${peso}/3`;
   l.nome.textContent = t.nome;
   l.del.setAttribute("aria-label", `Remover ${t.nome}`);
 
@@ -196,17 +171,19 @@ function atualizarLinha(l, t, hj) {
 
 function renderLista(ts) {
   const hj = hoje();
+  const perfil = alvo?.perfil ?? PERFIL_PADRAO;
   let visiveis = ts;
   if (filtro === "pendentes") visiveis = ts.filter((t) => { const a = atraso(t); return a === null || a >= 0; });
   if (filtro === "fracos") visiveis = ts.filter((t) => { const d = desempenho(t); return d !== null && d < 70; });
 
-  const alvo = $("lista");
+  const destino = $("lista");
   const ordem = AREAS.concat([...new Set(ts.map((t) => t.area))].filter((a) => !AREAS.includes(a)));
   const mostrados = new Set();
   const secoes = [];
 
   for (const area of ordem) {
-    const doGrupo = visiveis.filter((t) => t.area === area).sort((a, b) => prioridade(b, hj) - prioridade(a, hj));
+    const doGrupo = visiveis.filter((t) => t.area === area)
+      .sort((a, b) => prioridade(b, hj, alvo) - prioridade(a, hj, alvo));
     if (!doGrupo.length) continue;
 
     let bloco = blocos.get(area);
@@ -223,13 +200,11 @@ function renderLista(ts) {
     bloco.barra.style.width = pct + "%";
     bloco.pct.textContent = pct + "%";
 
-    // Percorre na ordem desejada arrastando uma âncora: só encosta no DOM
-    // a linha que está fora de lugar. O cabeçalho da área é a âncora inicial.
     let ancora = bloco.el.firstElementChild;
     for (const t of doGrupo) {
       let l = linhas.get(t.id);
       if (!l) { l = criarLinha(t.id); linhas.set(t.id, l); }
-      atualizarLinha(l, t, hj);
+      atualizarLinha(l, t, hj, perfil);
       mostrados.add(t.id);
       if (ancora.nextSibling !== l.el) bloco.el.insertBefore(l.el, ancora.nextSibling);
       ancora = l.el;
@@ -237,83 +212,133 @@ function renderLista(ts) {
     secoes.push(bloco.el);
   }
 
-  // Sai do DOM mas fica no cache: alternar filtro é a ação mais repetida, e
-  // reconstruir a linha (incluindo o SVG) só para ela voltar seria desperdício.
-  // O cache é limitado pelo número de temas que já existiram — dezenas.
+  // Sai do DOM mas fica em cache: alternar filtro é a ação mais repetida.
   for (const [id, l] of linhas) if (!mostrados.has(id)) l.el.remove();
 
   if (!secoes.length) {
     const p = document.createElement("p");
     p.className = "semfiltro";
     p.textContent = "Nenhum tema neste filtro.";
-    alvo.replaceChildren(p);
+    destino.replaceChildren(p);
     blocos.clear();
     return;
   }
 
-  // Mesma técnica de âncora para as seções: um filtro que esvazia uma área
-  // não deve remexer as outras.
-  if (alvo.firstElementChild?.className === "semfiltro") alvo.replaceChildren();
+  if (destino.firstElementChild?.className === "semfiltro") destino.replaceChildren();
   let ancora = null;
   for (const sec of secoes) {
-    const esperado = ancora ? ancora.nextSibling : alvo.firstChild;
-    if (esperado !== sec) alvo.insertBefore(sec, esperado);
+    const esperado = ancora ? ancora.nextSibling : destino.firstChild;
+    if (esperado !== sec) destino.insertBefore(sec, esperado);
     ancora = sec;
   }
   while (ancora.nextSibling) ancora.nextSibling.remove();
 }
 
-function renderFila(ts) {
-  const { meta, feitos, itens, restam } = filaDeHoje(ts, dados.prova.data);
+/* ---------- plano do dia ---------- */
+function renderPlano() {
+  const p = planoDoDia(dados.temas, dados.rotina, dados.provas, hoje());
   const plural = (n) => (n > 1 ? "s" : "");
 
-  $("tituloFila").textContent =
-    !restam ? "Tudo em dia"
-    : itens.length ? `${itens.length} de ${meta} para hoje${feitos ? ` — ${feitos} já registrado${plural(feitos)}` : ""}`
-    : `Meta do dia cumprida — ${feitos} registrado${plural(feitos)}`;
+  $("hojeMinutos").textContent = p.minutosDisponiveis
+    ? `${horas(p.minutosFeitos)} de ${horas(p.minutosDisponiveis)}${p.questoesHoje ? ` · ${p.questoesHoje} questões` : ""}`
+    : "dia sem horas na rotina";
 
-  if (!itens.length) {
+  $("barraDia").style.width =
+    p.minutosDisponiveis ? Math.min(100, Math.round((p.minutosFeitos / p.minutosDisponiveis) * 100)) + "%" : "0%";
+
+  const chip = $("chipFase");
+  chip.hidden = false;
+  chip.dataset.fase = p.fase;
+  chip.textContent = NOME_FASE[p.fase];
+
+  $("tituloFila").textContent =
+    !p.minutosDisponiveis ? "Hoje é dia de descanso"
+    : p.blocos.length ? `${p.blocos.length} bloco${plural(p.blocos.length)} para hoje`
+    : p.minutosFeitos ? "Plano do dia cumprido"
+    : "Nada pendente";
+
+  if (!p.blocos.length) {
     const li = document.createElement("li");
     li.className = "vazio";
-    li.textContent = restam
-      ? "Meta do dia cumprida. Parar aqui é o que consolida — o resto está agendado."
-      : "Tudo em dia. Um descanso também consolida memória.";
+    li.textContent =
+      !p.minutosDisponiveis ? "Sua rotina não prevê estudo hoje. Descanso também consolida memória."
+      : p.minutosFeitos ? "Meta de hoje cumprida. Parar aqui é o que consolida — o resto está agendado."
+      : "Tudo em dia.";
     $("fila").replaceChildren(li);
     return;
   }
 
-  $("fila").replaceChildren(...itens.map((t) => {
-    const a = atraso(t);
-    const [classe, rotulo] =
-      a === null ? ["novo", "novo"]
-      : a > 0 ? ["atr", `${a}d atrás`]
-      : a === 0 ? ["hoje", "hoje"]
-      : ["novo", "antecipar"];
-
+  $("fila").replaceChildren(...p.blocos.map((b) => {
     const li = document.createElement("li");
-    const tag = document.createElement("span");
-    tag.className = `tag ${classe}`;
-    tag.textContent = rotulo;
+
+    const min = document.createElement("span");
+    min.className = "min";
+    min.textContent = `${b.minutos}min`;
+
     const nome = document.createElement("span");
     nome.className = "nome";
-    nome.textContent = t.nome;
+    nome.textContent = b.tema.nome;
+
+    const motivo = document.createElement("span");
+    motivo.className = "motivo";
+    motivo.textContent = b.motivo;
+
     const area = document.createElement("span");
     area.className = "area";
-    area.textContent = t.area.split(" ")[0];
+    area.textContent = b.tema.area.split(" ")[0];
+
     const bt = document.createElement("button");
-    bt.dataset.reg = t.id;
+    bt.dataset.reg = b.tema.id;
     bt.textContent = "registrar";
 
-    li.append(tag, nome, area, bt);
+    li.append(min, nome, motivo, area, bt);
     return li;
   }));
 }
 
+/* ---------- render ---------- */
+function render() {
+  alvo = provaAlvo(dados.provas, hoje());
+
+  const dias = alvo ? diasEntre(hoje(), alvo.data) : null;
+  $("dias").textContent = dias === null ? "—" : dias < 0 ? "0" : dias;
+  $("provaNome").textContent = alvo?.nome || "a prova";
+  $("provaData").textContent = alvo
+    ? new Date(alvo.data + "T00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+    : "Cadastre suas provas para ver a contagem e o ritmo se ajustarem.";
+
+  const seguinte = dados.provas.filter((x) => x.data && x.data > (alvo?.data ?? ""))[0];
+  $("provaSeguinte").textContent = seguinte
+    ? `depois: ${seguinte.nome} em ${new Date(seguinte.data + "T00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`
+    : "";
+
+  const ts = dados.temas;
+  const cob = ts.filter((t) => t.historico.length).length;
+  const atr = ts.filter((t) => { const a = atraso(t); return a !== null && a > 0; }).length;
+  const notas = ts.map(desempenho).filter((n) => n !== null);
+  const qst = ts.reduce((s, t) => s + questoesFeitas(t), 0);
+
+  $("stCob").textContent = cob + "/" + ts.length;
+  $("stAtr").textContent = atr;
+  $("stAce").textContent = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) + "%" : "—";
+  $("stQst").textContent = qst;
+  $("stSeq").textContent = sequencia() + "d";
+
+  renderPlano();
+  renderLista(ts);
+}
+
+function sequencia() {
+  const dias = new Set(dados.temas.flatMap((t) => t.historico.map((h) => h.d)));
+  let n = 0, cursor = hoje();
+  if (!dias.has(cursor)) cursor = somaDias(cursor, -1); // o dia ainda não acabou
+  while (dias.has(cursor)) { n++; cursor = somaDias(cursor, -1); }
+  return n;
+}
+
 /* ---------- avisos ----------
    No lugar de alert() e confirm(), que travam a página e não cabem no meio
-   de uma sessão de estudo. Remover e registrar acontecem na hora e ficam
-   desfazíveis por alguns segundos — mais rápido que confirmar toda vez, e
-   mais seguro, porque cobre também o clique errado que um confirm aprovaria. */
+   de uma sessão de estudo. */
 const AVISO_SEGUNDOS = 7;
 let avisoTimer = null;
 
@@ -352,6 +377,7 @@ function registrarEvento(tipo, dadosEv) {
 document.addEventListener("click", (e) => {
   const reg = e.target.closest("[data-reg]");
   if (reg) { abrirRegistro(reg.dataset.reg); return; }
+
   const del = e.target.closest("[data-del]");
   if (del) {
     const t = dados.temas.find((x) => x.id === del.dataset.del);
@@ -359,13 +385,33 @@ document.addEventListener("click", (e) => {
     registrarEvento("tema-", { tema: t.id });
     avisar(`“${t.nome}” saiu do cronograma.`, {
       rotulo: "desfazer",
-      aoClicar: () => registrarEvento("tema+", { tema: t.id, nome: t.nome, area: t.area, peso: t.peso }),
+      aoClicar: () => registrarEvento("tema+", { tema: t.id, nome: t.nome, area: t.area, pesos: t.pesos }),
+    });
+    return;
+  }
+
+  const delProva = e.target.closest("[data-prova-del]");
+  if (delProva) {
+    const p = dados.provas.find((x) => x.prova === delProva.dataset.provaDel);
+    if (!p) return;
+    registrarEvento("prova-", { prova: p.prova });
+    renderListaProvas();
+    avisar(`“${p.nome}” removida.`, {
+      rotulo: "desfazer",
+      aoClicar: () => { registrarEvento("prova", p); renderListaProvas(); },
     });
   }
 });
 
+/* ---------- diálogo: registrar estudo ---------- */
 const dlgReg = $("dlgReg");
 const rangeAc = $("regAcertos");
+
+function lerInteiro(id) {
+  const v = parseInt($(id).value, 10);
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+
 function abrirRegistro(id) {
   const t = dados.temas.find((x) => x.id === id);
   if (!t) return;
@@ -373,34 +419,78 @@ function abrirRegistro(id) {
   $("regTema").textContent = t.nome;
   $("regArea").textContent = t.area;
   $("regData").value = hoje();
+  $("regQuestoes").value = "";
+  $("regCertas").value = "";
+  $("regMinutos").value = duracaoTipica(t);
   rangeAc.value = desempenho(t) ?? 70;
   atualizaHint();
   dlgReg.showModal();
 }
+
+/** Percentual da vez: da contagem quando houver, senão do controle. */
+function percentualDoFormulario() {
+  const q = lerInteiro("regQuestoes"), c = lerInteiro("regCertas");
+  if (q && c !== null) return Math.round((Math.min(c, q) / q) * 100);
+  return null;
+}
+
 function atualizaHint() {
-  const v = +rangeAc.value;
-  $("regOut").textContent = v + "%";
+  const q = lerInteiro("regQuestoes");
+  const pct = percentualDoFormulario();
+
+  // O controle de domínio só aparece quando não há contagem de questões.
+  $("regSemQuestoes").hidden = !!q;
+  $("regPct").textContent = pct === null ? "—" : pct + "%";
+  $("regOut").textContent = rangeAc.value + "%";
+
+  const v = pct ?? +rangeAc.value;
   const t = dados.temas.find((x) => x.id === alvoId);
   const etapa = v >= 80 ? Math.min((t?.etapa ?? 0) + 1, INTERVALOS.length - 1) : v >= 60 ? (t?.etapa ?? 0) : 0;
+  const data = $("regData").value || hoje();
+  const dias = intervaloAjustado(etapa, data, alvo?.data ?? "");
+  const quando = fmt(somaDias(data, dias));
+
+  const prazo = `${dias} dia${dias > 1 ? "s" : ""} — ${quando}`;
   $("regHint").textContent =
-    v >= 80 ? `Bom domínio — próxima revisão em ${INTERVALOS[etapa]} dias.`
-    : v >= 60 ? `Parcial — mantém o intervalo: revisão em ${INTERVALOS[etapa]} dias.`
-    : "Abaixo de 60% reinicia o ciclo: revisão amanhã.";
+    v >= 80 ? `Bom domínio, sobe um degrau: próxima revisão em ${prazo}`
+    : v >= 60 ? `Parcial, mantém o intervalo: revisão em ${prazo}`
+    : `Abaixo de 60% reinicia o ciclo: revisão em ${prazo}`;
 }
+
+for (const id of ["regQuestoes", "regCertas", "regData"]) $(id).addEventListener("input", atualizaHint);
 rangeAc.addEventListener("input", atualizaHint);
+
 dlgReg.addEventListener("close", () => {
   if (dlgReg.returnValue !== "ok") return;
   const t = dados.temas.find((x) => x.id === alvoId);
   if (!t) return;
-  const acertos = +rangeAc.value;
-  const ev = registrarEvento("estudo", { tema: t.id, data: $("regData").value || hoje(), acertos });
-  const novo = dados.temas.find((x) => x.id === t.id);
-  avisar(`${t.nome}: ${acertos}% — volta em ${fmt(novo?.proxima)}`, {
+
+  const q = lerInteiro("regQuestoes");
+  const c = lerInteiro("regCertas");
+  const minutos = lerInteiro("regMinutos");
+  const data = $("regData").value || hoje();
+
+  if (q && c !== null && c > q) {
+    avisar("Não dá para acertar mais questões do que você fez.");
+    return;
+  }
+
+  const registro = { tema: t.id, data };
+  if (minutos) registro.minutos = minutos;
+  if (q && c !== null) { registro.questoes = q; registro.certas = c; }
+  else registro.acertos = +rangeAc.value;
+
+  const ev = registrarEvento("estudo", registro);
+  const atualizado = dados.temas.find((x) => x.id === t.id);
+  const pct = q && c !== null ? Math.round((c / q) * 100) : +rangeAc.value;
+
+  avisar(`${t.nome}: ${pct}% — volta em ${fmt(atualizado?.proxima)}`, {
     rotulo: "desfazer",
     aoClicar: () => registrarEvento("estudo-", { evento: ev.id }),
   });
 });
 
+/* ---------- diálogo: novo tema ---------- */
 const dlgNovo = $("dlgNovo");
 $("btnNovo").addEventListener("click", () => {
   const areas = [...new Set(AREAS.concat(dados.temas.map((t) => t.area)))];
@@ -418,20 +508,108 @@ dlgNovo.addEventListener("close", () => {
     avisar("Use ao menos uma letra ou número no nome do tema.");
     return;
   }
-  registrarEvento("tema+", { tema: id, nome, area, peso: +$("nvPeso").value });
+  const peso = +$("nvPeso").value;
+  registrarEvento("tema+", { tema: id, nome, area, pesos: { enamed: peso, sesdf: peso } });
 });
 
-const dlgProva = $("dlgProva");
-$("btnProva").addEventListener("click", () => {
-  $("pvNome").value = dados.prova.nome === "a prova" ? "" : dados.prova.nome;
-  $("pvData").value = dados.prova.data;
-  dlgProva.showModal();
-});
-dlgProva.addEventListener("close", () => {
-  if (dlgProva.returnValue !== "ok") return;
-  registrarEvento("prova", { nome: $("pvNome").value.trim(), data: $("pvData").value || "" });
+/* ---------- diálogo: provas ---------- */
+const dlgProvas = $("dlgProvas");
+
+function renderListaProvas() {
+  const alvoAtual = provaAlvo(dados.provas, hoje());
+  const itens = dados.provas.map((p) => {
+    const li = document.createElement("li");
+
+    const qual = document.createElement("span");
+    qual.className = "qual";
+    qual.textContent = p.nome + (p.prova === alvoAtual?.prova ? " — alvo atual" : "");
+
+    const quando = document.createElement("span");
+    quando.className = "quando";
+    quando.textContent = p.data ? fmt(p.data) + "/" + p.data.slice(0, 4) : "sem data";
+
+    const bt = document.createElement("button");
+    bt.type = "button";                    // dentro de um form: não pode submeter
+    bt.className = "del";
+    bt.dataset.provaDel = p.prova;
+    bt.textContent = "×";
+    bt.setAttribute("aria-label", `Remover ${p.nome}`);
+
+    li.append(qual, quando, bt);
+    return li;
+  });
+
+  if (!itens.length) {
+    const li = document.createElement("li");
+    li.className = "vazia";
+    li.textContent = "Nenhuma prova cadastrada ainda.";
+    itens.push(li);
+  }
+  $("listaProvas").replaceChildren(...itens);
+}
+
+$("btnProvas").addEventListener("click", () => {
+  renderListaProvas();
+  $("pvNome").value = "";
+  $("pvData").value = "";
+  $("pvPerfil").value = PERFIL_PADRAO;
+  dlgProvas.showModal();
 });
 
+dlgProvas.addEventListener("close", () => {
+  if (dlgProvas.returnValue !== "ok") return;
+  const nome = $("pvNome").value.trim();
+  const data = $("pvData").value;
+  if (!nome || !data) { avisar("Prova precisa de nome e data."); return; }
+
+  const id = slug(nome).slice(0, 60) || "prova-" + Date.now();
+  const perfil = PERFIS.includes($("pvPerfil").value) ? $("pvPerfil").value : PERFIL_PADRAO;
+  registrarEvento("prova", { prova: id, nome, data, perfil });
+  avisar(`${nome} em ${fmt(data)}.`);
+});
+
+/* ---------- diálogo: rotina ---------- */
+const dlgRotina = $("dlgRotina");
+
+function camposRotina() {
+  return DIAS.map((_, i) => $("rot" + i));
+}
+function somaRotina() {
+  const total = camposRotina().reduce((s, el) => s + (parseInt(el.value, 10) || 0), 0);
+  $("rotinaTotal").textContent = `${horas(total)} por semana`;
+}
+
+// A grade é montada uma vez; os valores entram na abertura.
+$("semana").replaceChildren(...DIAS.map((d, i) => {
+  const wrap = document.createElement("div");
+  const lb = document.createElement("label");
+  lb.htmlFor = "rot" + i;
+  lb.textContent = d;
+  const inp = document.createElement("input");
+  inp.type = "number"; inp.id = "rot" + i;
+  inp.min = "0"; inp.max = "960"; inp.step = "15"; inp.inputMode = "numeric";
+  inp.addEventListener("input", somaRotina);
+  wrap.append(lb, inp);
+  return wrap;
+}));
+
+$("btnRotina").addEventListener("click", () => {
+  camposRotina().forEach((el, i) => { el.value = dados.rotina[i]; });
+  somaRotina();
+  dlgRotina.showModal();
+});
+
+dlgRotina.addEventListener("close", () => {
+  if (dlgRotina.returnValue !== "ok") return;
+  const minutos = camposRotina().map((el) => {
+    const v = parseInt(el.value, 10);
+    return Number.isFinite(v) && v > 0 ? Math.min(v, 960) : 0;
+  });
+  registrarEvento("rotina", { minutos });
+  avisar(`Rotina salva: ${horas(minutos.reduce((a, b) => a + b, 0))} por semana.`);
+});
+
+/* ---------- filtros ---------- */
 document.querySelectorAll("[data-filtro]").forEach((b) => {
   b.addEventListener("click", () => {
     filtro = b.dataset.filtro;
@@ -440,11 +618,9 @@ document.querySelectorAll("[data-filtro]").forEach((b) => {
   });
 });
 
-/* ---------- backup manual ----------
-   Deixou de ser o mecanismo de backup (isso agora é o servidor) e passou a ser
-   saída de emergência: levar o histórico para fora, ou trazer de um arquivo. */
+/* ---------- backup manual ---------- */
 $("btnExp").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify({ versao: 2, eventos: sync.todos() }, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ versao: 3, eventos: sync.todos() }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `ritmo-${hoje()}.json`;
@@ -457,7 +633,6 @@ $("fileImp").addEventListener("change", async (e) => {
   if (!f) return;
   try {
     const arq = JSON.parse(await f.text());
-    // v2 traz eventos; um export v1 antigo traz {temas:[...]} e é convertido.
     const lista = Array.isArray(arq?.eventos) ? arq.eventos
       : Array.isArray(arq?.temas) ? eventosDoFormatoAntigo(arq)
       : null;
@@ -491,7 +666,6 @@ if ("serviceWorker" in navigator) {
     reg.addEventListener("updatefound", () => {
       const novo = reg.installing;
       novo?.addEventListener("statechange", () => {
-        // controller existente = já havia uma versão rodando, logo é atualização.
         if (novo.state === "installed" && navigator.serviceWorker.controller) {
           // fixo: uma atualização não deve sumir sozinha antes de ser vista.
           avisar("Nova versão disponível.", {

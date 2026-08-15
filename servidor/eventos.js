@@ -21,12 +21,38 @@ const dataISO = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) &&
 const idTema = (v) => texto(v, 160) && /^[a-z0-9-]+\/[a-z0-9-]+$/.test(v);
 const inteiro = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
 
+const PERFIS = ["enamed", "sesdf"];
+const idProva = (v) => texto(v, 60) && /^[a-z0-9-]+$/.test(v);
+
+// Desempenho pode vir como percentual (formato antigo) ou como contagem.
+const temDesempenho = (d) =>
+  inteiro(d.acertos, 0, 100) ||
+  (inteiro(d.questoes, 1, 2000) && inteiro(d.certas, 0, 2000) && d.certas <= d.questoes);
+const minutosOpcionais = (d) => d.minutos === undefined || inteiro(d.minutos, 1, 16 * 60);
+
+// Peso pode vir único (formato antigo) ou por perfil.
+const temPesos = (d) =>
+  inteiro(d.peso, 1, 3) ||
+  (d.pesos && typeof d.pesos === "object" && !Array.isArray(d.pesos) &&
+    PERFIS.every((p) => inteiro(d.pesos[p], 1, 3)));
+
 const SCHEMAS = {
-  estudo: (d) => idTema(d.tema) && dataISO(d.data) && inteiro(d.acertos, 0, 100),
+  estudo: (d) => idTema(d.tema) && dataISO(d.data) && temDesempenho(d) && minutosOpcionais(d),
   "estudo-": (d) => texto(d.evento, 100),
-  "tema+": (d) => idTema(d.tema) && texto(d.nome, 120) && texto(d.area, 80) && inteiro(d.peso, 1, 3),
+  "tema+": (d) => idTema(d.tema) && texto(d.nome, 120) && texto(d.area, 80) && temPesos(d),
   "tema-": (d) => idTema(d.tema),
-  prova: (d) => typeof d.nome === "string" && d.nome.length <= 80 && (d.data === "" || dataISO(d.data)),
+  prova: (d) =>
+    typeof d.nome === "string" && d.nome.length <= 80 &&
+    (d.data === "" || dataISO(d.data)) &&
+    (d.prova === undefined || idProva(d.prova)) &&
+    (d.perfil === undefined || PERFIS.includes(d.perfil)),
+  "prova-": (d) => idProva(d.prova),
+  rotina: (d) =>
+    Array.isArray(d.minutos) && d.minutos.length === 7 &&
+    d.minutos.every((m) => inteiro(m, 0, 16 * 60)),
+  simulado: (d) =>
+    dataISO(d.data) && temDesempenho(d) && minutosOpcionais(d) &&
+    (d.prova === undefined || d.prova === null || idProva(d.prova)),
 };
 
 function limpar(ev) {
@@ -41,12 +67,21 @@ function limpar(ev) {
 
   // Reserializa a partir do schema: campos extras enviados pelo cliente não
   // são gravados, então o banco só contém o que este arquivo reconhece.
+  const so = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+
   const dados =
-    ev.tipo === "estudo"    ? { tema: ev.dados.tema, data: ev.dados.data, acertos: ev.dados.acertos }
+    ev.tipo === "estudo"    ? so({ tema: ev.dados.tema, data: ev.dados.data, acertos: ev.dados.acertos,
+                                   questoes: ev.dados.questoes, certas: ev.dados.certas, minutos: ev.dados.minutos })
     : ev.tipo === "estudo-" ? { evento: ev.dados.evento }
-    : ev.tipo === "tema+"   ? { tema: ev.dados.tema, nome: ev.dados.nome, area: ev.dados.area, peso: ev.dados.peso }
+    : ev.tipo === "tema+"   ? so({ tema: ev.dados.tema, nome: ev.dados.nome, area: ev.dados.area,
+                                   peso: ev.dados.peso,
+                                   pesos: ev.dados.pesos && { enamed: ev.dados.pesos.enamed, sesdf: ev.dados.pesos.sesdf } })
     : ev.tipo === "tema-"   ? { tema: ev.dados.tema }
-    :                         { nome: ev.dados.nome, data: ev.dados.data };
+    : ev.tipo === "prova-"  ? { prova: ev.dados.prova }
+    : ev.tipo === "rotina"  ? { minutos: ev.dados.minutos }
+    : ev.tipo === "simulado" ? so({ data: ev.dados.data, prova: ev.dados.prova, acertos: ev.dados.acertos,
+                                    questoes: ev.dados.questoes, certas: ev.dados.certas, minutos: ev.dados.minutos })
+    :                         so({ prova: ev.dados.prova, nome: ev.dados.nome, data: ev.dados.data, perfil: ev.dados.perfil });
 
   return { id: ev.id, tipo: ev.tipo, ts: ev.ts, dados };
 }
