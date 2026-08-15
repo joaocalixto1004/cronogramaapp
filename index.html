@@ -7,141 +7,18 @@
 <meta name="description" content="Cronograma de estudo para residência médica com revisão espaçada e priorização por desempenho.">
 <meta name="theme-color" content="#12262F">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-:root{
-  --paper:#E7EBEC;
-  --paper-2:#F4F6F6;
-  --ink:#12262F;
-  --ink-2:#3E5560;
-  --ink-3:#7B8E97;
-  --rule:#CBD5D8;
-  --azul:#1F5F7E;
-  --azul-claro:#DCE9EE;
-  --verde:#2C7357;
-  --ambar:#B07419;
-  --vermelho:#B0402A;
-  --r:3px;
-  --pad:clamp(14px,3.2vw,28px);
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:var(--paper);
-  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);
-  background-size:100% 40px,40px 100%;
-  background-position:-1px -1px;
-  color:var(--ink);
-  font-family:"IBM Plex Sans",system-ui,sans-serif;
-  font-size:15px;line-height:1.5;
-  -webkit-text-size-adjust:100%;
-}
-h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;margin:0;letter-spacing:.01em}
-.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
-button{font:inherit;color:inherit;cursor:pointer}
-:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
-
-.wrap{max-width:1120px;margin:0 auto;padding:0 var(--pad) 80px}
-
-/* ---------- cabeçalho / contagem ---------- */
-header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16px}
-.brandrow{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.brand{font-size:19px;letter-spacing:-.01em}
-.brand span{color:var(--azul)}
-.counter{display:flex;align-items:flex-end;gap:14px;margin-top:18px;flex-wrap:wrap}
-.counter .num{font-family:"IBM Plex Mono",monospace;font-size:clamp(44px,11vw,72px);line-height:.86;font-weight:600;letter-spacing:-.03em}
-.counter .lbl{padding-bottom:6px;max-width:290px}
-.counter .lbl p{margin:2px 0 0;font-size:12.5px;color:var(--ink-2)}
-.ghost{background:none;border:1px solid var(--rule);border-radius:var(--r);padding:5px 10px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
-.ghost:hover{border-color:var(--azul);color:var(--azul)}
-
-/* ---------- métricas ---------- */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:30px}
-.stat{background:var(--paper-2);padding:12px 14px}
-.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:24px;font-weight:600;line-height:1.2;margin-top:3px}
-
-/* ---------- fila de hoje ---------- */
-.today{background:var(--ink);color:var(--paper-2);border-radius:var(--r);padding:18px var(--pad);margin-bottom:32px}
-.today h2{font-size:15px;color:#fff}
-.today .eyebrow{color:#8FAEB9}
-.queue{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:1px}
-.queue li{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid #24404C}
-.queue .tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:2px;white-space:nowrap}
-.tag.atr{background:var(--vermelho);color:#fff}
-.tag.hoje{background:#2E93B8;color:#08222C}
-.tag.novo{background:#40606D;color:#DDE9ED}
-.queue .nome{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.queue .area{font-size:11px;color:#8FAEB9;font-family:"IBM Plex Mono",monospace;display:none}
-@media(min-width:640px){.queue .area{display:block}}
-.queue button{background:#2A4854;border:0;color:#EAF2F4;border-radius:var(--r);padding:6px 12px;font-size:12.5px;font-family:"IBM Plex Mono",monospace}
-.queue button:hover{background:var(--azul)}
-.vazio{color:#8FAEB9;font-size:13.5px;padding:14px 0 4px;border-top:1px solid #24404C;margin-top:14px}
-
-/* ---------- filtros ---------- */
-.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
-.chip{background:var(--paper-2);border:1px solid var(--rule);border-radius:20px;padding:5px 13px;font-size:12.5px;font-family:"IBM Plex Mono",monospace}
-.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper-2)}
-.bar .spacer{flex:1}
-
-/* ---------- tabela de temas ---------- */
-.areablock{margin-bottom:26px}
-.areahead{display:flex;align-items:center;gap:12px;padding:0 0 7px;border-bottom:1.5px solid var(--ink)}
-.areahead h3{font-size:14px;letter-spacing:.02em;text-transform:uppercase}
-.areahead .bar-prog{flex:1;height:5px;background:var(--paper-2);border:1px solid var(--rule);position:relative;max-width:220px}
-.areahead .bar-prog i{position:absolute;inset:0 auto 0 0;background:var(--verde);display:block}
-.row{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--rule)}
-.row:hover{background:var(--paper-2)}
-.row .main{min-width:0}
-.row .tema{font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:8px}
-.peso{width:6px;height:6px;border-radius:50%;background:var(--ink-3);flex:none}
-.peso.p3{background:var(--vermelho)}
-.peso.p2{background:var(--ambar)}
-.meta{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
-.meta .due{color:var(--vermelho);font-weight:500}
-.meta .ok{color:var(--verde)}
-.right{display:flex;align-items:center;gap:10px}
-.trace{flex:none}
-.reg{background:var(--paper-2);border:1px solid var(--ink);border-radius:var(--r);padding:5px 11px;font-size:12px;font-family:"IBM Plex Mono",monospace}
-.reg:hover{background:var(--ink);color:var(--paper-2)}
-.del{background:none;border:0;color:var(--ink-3);font-size:15px;line-height:1;padding:4px 2px}
-.del:hover{color:var(--vermelho)}
-
-/* ---------- rodapé de dados ---------- */
-footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--rule);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-footer p{margin:0;font-size:12px;color:var(--ink-3);flex:1;min-width:200px}
-
-/* ---------- diálogos ---------- */
-dialog{border:1.5px solid var(--ink);border-radius:var(--r);padding:0;background:var(--paper-2);color:var(--ink);width:min(430px,92vw);box-shadow:0 20px 50px rgba(18,38,47,.22)}
-dialog::backdrop{background:rgba(18,38,47,.42)}
-.dlg{padding:20px}
-.dlg h3{font-size:17px;margin-bottom:4px}
-.dlg .sub{font-size:12.5px;color:var(--ink-2);margin:0 0 16px}
-label{display:block;font-size:12px;font-family:"IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin:14px 0 5px}
-input,select{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--r);background:#fff;color:var(--ink)}
-input[type=range]{padding:0}
-.acertos{display:flex;align-items:center;gap:12px}
-.acertos output{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;min-width:60px}
-.hint{font-size:12px;color:var(--ink-2);background:var(--azul-claro);border-left:2px solid var(--azul);padding:8px 10px;margin-top:12px}
-.acoes{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
-.btn{background:var(--ink);color:var(--paper-2);border:1.5px solid var(--ink);border-radius:var(--r);padding:8px 16px;font-size:14px}
-.btn:hover{background:var(--azul);border-color:var(--azul)}
-.btn.sec{background:none;color:var(--ink)}
-.btn.sec:hover{color:var(--azul)}
-
-@media (prefers-reduced-motion:no-preference){
-  .row,.reg,.queue li{transition:background .12s ease,color .12s ease}
-}
-</style>
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="estilo.css">
+<link rel="preload" href="fontes/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fontes/plex-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<script type="module" src="app.js"></script>
 </head>
 <body>
 <div class="wrap">
 
 <header>
   <div class="brandrow">
-    <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow" style="margin-left:6px">cronograma de residência</span></h1>
+    <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow">cronograma de residência</span></h1>
     <button class="ghost" id="btnProva">ajustar prova</button>
   </div>
   <div class="counter">
@@ -177,11 +54,16 @@ input[type=range]{padding:0}
 <main id="lista"></main>
 
 <footer>
-  <p>Os dados ficam salvos só neste aparelho. Exporte de vez em quando — é o seu backup.</p>
+  <p id="sync" class="sync" data-estado="ok" role="status">sincronizando…</p>
   <button class="ghost" id="btnExp">exportar .json</button>
   <button class="ghost" id="btnImp">importar</button>
   <input type="file" id="fileImp" accept="application/json" hidden>
 </footer>
+</div>
+
+<div class="aviso" id="aviso" role="status">
+  <span>Nova versão disponível.</span>
+  <button id="btnAtualizar">recarregar</button>
 </div>
 
 <!-- registrar estudo -->
@@ -198,7 +80,7 @@ input[type=range]{padding:0}
   </div>
   <div class="hint" id="regHint"></div>
   <div class="acoes">
-    <button class="btn sec" value="cancel" type="submit">cancelar</button>
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
     <button class="btn" value="ok" type="submit" id="regOk">salvar</button>
   </div>
 </form></dialog>
@@ -209,7 +91,7 @@ input[type=range]{padding:0}
   <h3>Adicionar ao cronograma</h3>
   <p class="sub">Use para temas que a sua banca cobra e não estão na lista.</p>
   <label for="nvNome">Nome do tema</label>
-  <input type="text" id="nvNome" placeholder="Ex.: Doença de Chagas" required>
+  <input type="text" id="nvNome" placeholder="Ex.: Doença de Chagas" required maxlength="120">
   <label for="nvArea">Área</label>
   <select id="nvArea"></select>
   <label for="nvPeso">Incidência na prova</label>
@@ -230,409 +112,14 @@ input[type=range]{padding:0}
   <h3>Sua prova</h3>
   <p class="sub">A contagem e a priorização se ajustam a esta data.</p>
   <label for="pvNome">Banca ou instituição</label>
-  <input type="text" id="pvNome" placeholder="Ex.: USP, UNIFESP, ENARE">
+  <input type="text" id="pvNome" placeholder="Ex.: USP, UNIFESP, ENARE" maxlength="80">
   <label for="pvData">Data da prova</label>
   <input type="date" id="pvData">
   <div class="acoes">
-    <button class="btn sec" value="cancel" type="submit">cancelar</button>
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
     <button class="btn" value="ok" type="submit">salvar</button>
   </div>
 </form></dialog>
 
-<script>
-/* ============================================================
-   Ritmo — cronograma de residência médica
-   Dados em localStorage. Sem servidor, sem conta, sem custo.
-============================================================ */
-
-const CHAVE = "ritmo.v1";
-const INTERVALOS = [1, 7, 30, 90];          // revisão espaçada, em dias
-const AREAS = ["Clínica Médica","Cirurgia","Ginecologia e Obstetrícia","Pediatria","Medicina Preventiva"];
-
-/* Temas iniciais: peso 3 = alta incidência nas provas de acesso direto */
-const SEMENTE = [
-["Clínica Médica","Síndromes coronarianas agudas",3],
-["Clínica Médica","Insuficiência cardíaca",3],
-["Clínica Médica","Hipertensão arterial sistêmica",3],
-["Clínica Médica","Arritmias e fibrilação atrial",2],
-["Clínica Médica","Asma e DPOC",3],
-["Clínica Médica","Pneumonias e derrame pleural",3],
-["Clínica Médica","Tromboembolismo pulmonar",2],
-["Clínica Médica","Distúrbios hidroeletrolíticos",3],
-["Clínica Médica","Distúrbios ácido-base",2],
-["Clínica Médica","Injúria renal aguda e DRC",3],
-["Clínica Médica","Diabetes mellitus e complicações agudas",3],
-["Clínica Médica","Tireoidopatias",2],
-["Clínica Médica","Hepatites virais e cirrose",3],
-["Clínica Médica","Hemorragia digestiva",2],
-["Clínica Médica","HIV e infecções oportunistas",3],
-["Clínica Médica","Tuberculose",3],
-["Clínica Médica","Sepse e choque",3],
-["Clínica Médica","Anemias",2],
-["Clínica Médica","Leucemias e linfomas",2],
-["Clínica Médica","Lúpus, artrite reumatoide e vasculites",2],
-["Clínica Médica","AVC e emergências neurológicas",3],
-["Clínica Médica","Cefaleias e epilepsia",1],
-["Cirurgia","Trauma — ABCDE e ATLS",3],
-["Cirurgia","Trauma abdominal e torácico",3],
-["Cirurgia","Choque e reposição volêmica",3],
-["Cirurgia","Abdome agudo inflamatório",3],
-["Cirurgia","Apendicite aguda",3],
-["Cirurgia","Colecistite e coledocolitíase",3],
-["Cirurgia","Obstrução intestinal",2],
-["Cirurgia","Pancreatite aguda",2],
-["Cirurgia","Hérnias da parede abdominal",2],
-["Cirurgia","Queimaduras",2],
-["Cirurgia","Pré e pós-operatório",2],
-["Cirurgia","Câncer gástrico e colorretal",2],
-["Cirurgia","Doença arterial e venosa periférica",2],
-["Cirurgia","Urologia — litíase e HPB",1],
-["Ginecologia e Obstetrícia","Pré-natal de baixo risco",3],
-["Ginecologia e Obstetrícia","Síndromes hipertensivas da gestação",3],
-["Ginecologia e Obstetrícia","Hemorragias da primeira metade",3],
-["Ginecologia e Obstetrícia","Hemorragias da segunda metade",3],
-["Ginecologia e Obstetrícia","Trabalho de parto e partograma",3],
-["Ginecologia e Obstetrícia","Diabetes na gestação",2],
-["Ginecologia e Obstetrícia","Infecções congênitas",2],
-["Ginecologia e Obstetrícia","SUA e PALM-COEIN",3],
-["Ginecologia e Obstetrícia","Síndrome dos ovários policísticos",3],
-["Ginecologia e Obstetrícia","Endometriose",2],
-["Ginecologia e Obstetrícia","Climatério e terapia hormonal",2],
-["Ginecologia e Obstetrícia","Rastreio e lesões do colo — HPV/NIC",3],
-["Ginecologia e Obstetrícia","Câncer e nódulos de mama",3],
-["Ginecologia e Obstetrícia","Infecções genitais e DIP",2],
-["Ginecologia e Obstetrícia","Contracepção",2],
-["Pediatria","Reanimação neonatal",3],
-["Pediatria","Icterícia neonatal",3],
-["Pediatria","Sepse neonatal e infecções perinatais",2],
-["Pediatria","Aleitamento materno",3],
-["Pediatria","Crescimento e desenvolvimento",3],
-["Pediatria","Calendário vacinal",3],
-["Pediatria","Diarreia e desidratação",3],
-["Pediatria","Pneumonia e bronquiolite",3],
-["Pediatria","Asma na infância",2],
-["Pediatria","IVAS e otite média aguda",2],
-["Pediatria","Doenças exantemáticas",2],
-["Pediatria","Desnutrição e carências",2],
-["Pediatria","ITU e refluxo vesicoureteral",1],
-["Pediatria","Violência e maus-tratos",2],
-["Medicina Preventiva","SUS — princípios e Leis 8.080/8.142",3],
-["Medicina Preventiva","Atenção primária e ESF",3],
-["Medicina Preventiva","Tipos de estudo epidemiológico",3],
-["Medicina Preventiva","Medidas de associação e impacto",3],
-["Medicina Preventiva","Testes diagnósticos — S, E, VPP, VPN",3],
-["Medicina Preventiva","Indicadores de saúde",2],
-["Medicina Preventiva","Vigilância e notificação compulsória",2],
-["Medicina Preventiva","Bioestatística aplicada",2],
-["Medicina Preventiva","Ética médica e bioética",2],
-["Medicina Preventiva","Saúde do trabalhador",1],
-];
-
-/* ---------- estado ---------- */
-let dados = carregar();
-let filtro = "todos";
-let alvoId = null;
-
-function carregar(){
-  try{
-    const bruto = localStorage.getItem(CHAVE);
-    if(bruto) return JSON.parse(bruto);
-  }catch(e){ console.warn("Não foi possível ler os dados salvos:", e); }
-  return {
-    prova:{nome:"a prova", data:""},
-    temas: SEMENTE.map((t,i)=>({
-      id:"t"+i, area:t[0], nome:t[1], peso:t[2],
-      etapa:0, proxima:null, historico:[]
-    }))
-  };
-}
-function salvar(){
-  try{ localStorage.setItem(CHAVE, JSON.stringify(dados)); }
-  catch(e){ alert("Não deu para salvar neste navegador. Exporte o .json para não perder o histórico."); }
-}
-
-/* ---------- datas ---------- */
-const hoje = ()=> new Date().toISOString().slice(0,10);
-const diasEntre = (a,b)=> Math.round((new Date(b+"T00:00") - new Date(a+"T00:00"))/864e5);
-function somaDias(iso, n){
-  const d = new Date(iso+"T00:00"); d.setDate(d.getDate()+n);
-  return d.toISOString().slice(0,10);
-}
-const fmt = iso => iso ? new Date(iso+"T00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}) : "";
-
-/* ---------- lógica de revisão ---------- */
-function ultimo(t){ return t.historico.length ? t.historico[t.historico.length-1] : null; }
-function desempenho(t){ const u = ultimo(t); return u ? u.a : null; }
-function atraso(t){ return t.proxima ? diasEntre(t.proxima, hoje()) : null; }
-
-function registrar(t, data, acertos){
-  t.historico.push({d:data, a:acertos});
-  if(acertos >= 80)      t.etapa = Math.min(t.etapa + 1, INTERVALOS.length - 1);
-  else if(acertos >= 60) t.etapa = t.etapa;            // consolida no mesmo intervalo
-  else                   t.etapa = 0;                  // volta para revisão em 24 h
-  t.proxima = somaDias(data, INTERVALOS[t.etapa]);
-  salvar();
-}
-
-/* Prioridade: incidência × lacuna de desempenho × urgência da revisão */
-function prioridade(t){
-  const p = t.peso * 10;
-  const d = desempenho(t);
-  const lacuna = d === null ? 22 : (100 - d) / 4;
-  const at = atraso(t);
-  const urg = at === null ? 6 : (at >= 0 ? 14 + Math.min(at, 20) : Math.max(0, 6 + at));
-  return p + lacuna + urg;
-}
-
-/* ---------- curva de retenção (SVG) ---------- */
-function tracado(t){
-  const W = 84, H = 26, hj = hoje();
-  const marcos = t.historico.slice(-4);
-  if(!marcos.length){
-    return `<svg class="trace" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
-      <line x1="0" y1="${H-3}" x2="${W}" y2="${H-3}" stroke="var(--rule)" stroke-width="1.5" stroke-dasharray="3 3"/></svg>`;
-  }
-  const inicio = marcos[0].d;
-  const span = Math.max(diasEntre(inicio, hj), 1);
-  let d = "", cor = "var(--verde)";
-  marcos.forEach((m, i)=>{
-    const x0 = (diasEntre(inicio, m.d) / span) * W;
-    const fim = i < marcos.length-1 ? diasEntre(inicio, marcos[i+1].d) : span;
-    const x1 = (fim / span) * W;
-    const topo = H - 3 - (H - 8) * (m.a/100);
-    d += `M${x0.toFixed(1)},${topo.toFixed(1)} `;
-    for(let s=1; s<=6; s++){
-      const x = x0 + (x1-x0)*(s/6);
-      const decai = Math.exp(-1.05*(s/6));
-      const y = (H-3) - ((H-8)*(m.a/100))*(0.35 + 0.65*decai);
-      d += `L${x.toFixed(1)},${y.toFixed(1)} `;
-    }
-  });
-  const u = ultimo(t).a;
-  if(u < 60) cor = "var(--vermelho)"; else if(u < 80) cor = "var(--ambar)";
-  const pontos = marcos.map(m=>{
-    const x = (diasEntre(inicio, m.d)/span)*W;
-    const y = H - 3 - (H-8)*(m.a/100);
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.8" fill="${cor}"/>`;
-  }).join("");
-  return `<svg class="trace" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Retenção estimada: último desempenho ${u}%">
-    <line x1="0" y1="${H-3}" x2="${W}" y2="${H-3}" stroke="var(--rule)" stroke-width="1"/>
-    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.6" stroke-linejoin="round"/>${pontos}</svg>`;
-}
-
-/* ---------- render ---------- */
-function render(){
-  // contagem regressiva
-  const dias = dados.prova.data ? diasEntre(hoje(), dados.prova.data) : null;
-  document.getElementById("dias").textContent = dias === null ? "—" : (dias < 0 ? "0" : dias);
-  document.getElementById("provaNome").textContent = dados.prova.nome || "a prova";
-  document.getElementById("provaData").textContent = dados.prova.data
-    ? new Date(dados.prova.data+"T00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})
-    : "Defina a data em “ajustar prova” para ver a contagem.";
-
-  // métricas
-  const ts = dados.temas;
-  const cob = ts.filter(t=>t.historico.length).length;
-  const atr = ts.filter(t=>{const a=atraso(t); return a!==null && a>0;}).length;
-  const notas = ts.map(desempenho).filter(n=>n!==null);
-  document.getElementById("stCob").textContent = cob + "/" + ts.length;
-  document.getElementById("stAtr").textContent = atr;
-  document.getElementById("stAce").textContent = notas.length
-    ? Math.round(notas.reduce((a,b)=>a+b,0)/notas.length) + "%" : "—";
-  document.getElementById("stSeq").textContent = sequencia() + "d";
-
-  renderFila(ts);
-  renderLista(ts);
-}
-
-function sequencia(){
-  const dias = new Set(dados.temas.flatMap(t=>t.historico.map(h=>h.d)));
-  let n = 0, cursor = hoje();
-  if(!dias.has(cursor)) cursor = somaDias(cursor, -1);   // o dia ainda não acabou
-  while(dias.has(cursor)){ n++; cursor = somaDias(cursor, -1); }
-  return n;
-}
-
-function renderFila(ts){
-  const fila = document.getElementById("fila");
-  const hj = hoje();
-  const feitosHoje = ts.filter(t=> ultimo(t) && ultimo(t).d === hj).length;
-  const pend = ts.filter(t=> !(ultimo(t) && ultimo(t).d === hj))
-                 .sort((a,b)=> prioridade(b) - prioridade(a))
-                 .slice(0,5);
-  document.getElementById("tituloFila").textContent =
-    feitosHoje ? `Mais ${pend.length ? "temas" : "nada"} para hoje — ${feitosHoje} já registrado${feitosHoje>1?"s":""}`
-               : "O que estudar agora";
-  fila.innerHTML = pend.map(t=>{
-    const a = atraso(t);
-    const tag = a === null ? '<span class="tag novo">novo</span>'
-              : a > 0 ? `<span class="tag atr">${a}d atrás</span>`
-              : a === 0 ? '<span class="tag hoje">hoje</span>'
-              : '<span class="tag novo">antecipar</span>';
-    return `<li>${tag}<span class="nome">${esc(t.nome)}</span>
-      <span class="area">${esc(t.area.split(" ")[0])}</span>
-      <button data-reg="${t.id}">registrar</button></li>`;
-  }).join("") || '<li class="vazio">Tudo em dia. Um descanso também consolida memória.</li>';
-}
-
-function renderLista(ts){
-  const alvo = document.getElementById("lista");
-  let visiveis = ts;
-  if(filtro === "pendentes") visiveis = ts.filter(t=>{const a=atraso(t); return a===null || a>=0;});
-  if(filtro === "fracos")    visiveis = ts.filter(t=>{const d=desempenho(t); return d!==null && d<70;});
-
-  alvo.innerHTML = AREAS.concat(
-      [...new Set(ts.map(t=>t.area))].filter(a=>!AREAS.includes(a))
-    ).map(area=>{
-    const doGrupo = visiveis.filter(t=>t.area===area).sort((a,b)=>prioridade(b)-prioridade(a));
-    if(!doGrupo.length) return "";
-    const todos = ts.filter(t=>t.area===area);
-    const pct = todos.length ? Math.round(todos.filter(t=>t.historico.length).length/todos.length*100) : 0;
-    return `<section class="areablock">
-      <div class="areahead">
-        <h3>${esc(area)}</h3>
-        <div class="bar-prog"><i style="width:${pct}%"></i></div>
-        <span class="eyebrow">${pct}%</span>
-      </div>
-      ${doGrupo.map(linha).join("")}
-    </section>`;
-  }).join("") || `<p style="color:var(--ink-3);font-size:14px">Nenhum tema neste filtro.</p>`;
-}
-
-function linha(t){
-  const d = desempenho(t), a = atraso(t), u = ultimo(t);
-  const partes = [];
-  if(u) partes.push(`<span>último ${fmt(u.d)}</span>`);
-  if(d !== null) partes.push(`<span class="${d>=70?"ok":"due"}">${d}% acertos</span>`);
-  if(a !== null) partes.push(a > 0 ? `<span class="due">revisar — ${a}d atrás</span>`
-                                   : `<span>revisar ${fmt(t.proxima)}</span>`);
-  if(!partes.length) partes.push("<span>ainda não estudado</span>");
-  return `<div class="row">
-    <div class="main">
-      <div class="tema"><i class="peso p${t.peso}" title="incidência ${t.peso}/3"></i>${esc(t.nome)}</div>
-      <div class="meta">${partes.join("")}</div>
-    </div>
-    <div class="right">${tracado(t)}
-      <button class="reg" data-reg="${t.id}">registrar</button>
-      <button class="del" data-del="${t.id}" title="remover tema" aria-label="Remover ${esc(t.nome)}">×</button>
-    </div>
-  </div>`;
-}
-
-const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-/* ---------- interações ---------- */
-document.addEventListener("click", e=>{
-  const reg = e.target.closest("[data-reg]");
-  if(reg){ abrirRegistro(reg.dataset.reg); return; }
-  const del = e.target.closest("[data-del]");
-  if(del){
-    const t = dados.temas.find(x=>x.id===del.dataset.del);
-    if(t && confirm(`Remover “${t.nome}” do cronograma?`)){
-      dados.temas = dados.temas.filter(x=>x.id!==t.id); salvar(); render();
-    }
-  }
-});
-
-const dlgReg = document.getElementById("dlgReg");
-const rangeAc = document.getElementById("regAcertos");
-function abrirRegistro(id){
-  const t = dados.temas.find(x=>x.id===id); if(!t) return;
-  alvoId = id;
-  document.getElementById("regTema").textContent = t.nome;
-  document.getElementById("regArea").textContent = t.area;
-  document.getElementById("regData").value = hoje();
-  rangeAc.value = desempenho(t) ?? 70;
-  atualizaHint();
-  dlgReg.showModal();
-}
-function atualizaHint(){
-  const v = +rangeAc.value;
-  document.getElementById("regOut").textContent = v + "%";
-  const t = dados.temas.find(x=>x.id===alvoId);
-  const etapa = v>=80 ? Math.min((t?.etapa??0)+1, 3) : v>=60 ? (t?.etapa??0) : 0;
-  const txt = v>=80 ? `Bom domínio — próxima revisão em ${INTERVALOS[etapa]} dias.`
-            : v>=60 ? `Parcial — mantém o intervalo: revisão em ${INTERVALOS[etapa]} dias.`
-            : `Abaixo de 60% reinicia o ciclo: revisão amanhã.`;
-  document.getElementById("regHint").textContent = txt;
-}
-rangeAc.addEventListener("input", atualizaHint);
-dlgReg.addEventListener("close", ()=>{
-  if(dlgReg.returnValue !== "ok") return;
-  const t = dados.temas.find(x=>x.id===alvoId); if(!t) return;
-  registrar(t, document.getElementById("regData").value || hoje(), +rangeAc.value);
-  render();
-});
-
-const dlgNovo = document.getElementById("dlgNovo");
-document.getElementById("btnNovo").addEventListener("click", ()=>{
-  const sel = document.getElementById("nvArea");
-  const areas = [...new Set(AREAS.concat(dados.temas.map(t=>t.area)))];
-  sel.innerHTML = areas.map(a=>`<option>${esc(a)}</option>`).join("");
-  document.getElementById("nvNome").value = "";
-  dlgNovo.showModal();
-});
-dlgNovo.addEventListener("close", ()=>{
-  if(dlgNovo.returnValue !== "ok") return;
-  const nome = document.getElementById("nvNome").value.trim(); if(!nome) return;
-  dados.temas.push({
-    id:"t"+Date.now(), nome,
-    area:document.getElementById("nvArea").value,
-    peso:+document.getElementById("nvPeso").value,
-    etapa:0, proxima:null, historico:[]
-  });
-  salvar(); render();
-});
-
-const dlgProva = document.getElementById("dlgProva");
-document.getElementById("btnProva").addEventListener("click", ()=>{
-  document.getElementById("pvNome").value = dados.prova.nome === "a prova" ? "" : dados.prova.nome;
-  document.getElementById("pvData").value = dados.prova.data;
-  dlgProva.showModal();
-});
-dlgProva.addEventListener("close", ()=>{
-  if(dlgProva.returnValue !== "ok") return;
-  dados.prova.nome = document.getElementById("pvNome").value.trim() || "a prova";
-  dados.prova.data = document.getElementById("pvData").value;
-  salvar(); render();
-});
-
-document.querySelectorAll("[data-filtro]").forEach(b=>{
-  b.addEventListener("click", ()=>{
-    filtro = b.dataset.filtro;
-    document.querySelectorAll("[data-filtro]").forEach(x=>x.setAttribute("aria-pressed", x===b));
-    render();
-  });
-});
-
-/* ---------- backup ---------- */
-document.getElementById("btnExp").addEventListener("click", ()=>{
-  const blob = new Blob([JSON.stringify(dados,null,2)],{type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `ritmo-${hoje()}.json`;
-  a.click(); URL.revokeObjectURL(a.href);
-});
-document.getElementById("btnImp").addEventListener("click", ()=> document.getElementById("fileImp").click());
-document.getElementById("fileImp").addEventListener("change", async e=>{
-  const f = e.target.files[0]; if(!f) return;
-  try{
-    const novo = JSON.parse(await f.text());
-    if(!novo || !Array.isArray(novo.temas)) throw new Error("formato");
-    if(confirm("Substituir o cronograma atual pelo arquivo importado?")){
-      dados = novo; salvar(); render();
-    }
-  }catch(err){
-    alert("Este arquivo não é um backup do Ritmo. Selecione um .json exportado pelo próprio app.");
-  }
-  e.target.value = "";
-});
-
-if("serviceWorker" in navigator){
-  window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js").catch(()=>{}));
-}
-
-render();
-</script>
 </body>
 </html>

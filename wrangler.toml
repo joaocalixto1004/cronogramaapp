@@ -1,0 +1,10 @@
+name = "ritmo"
+compatibility_date = "2026-08-01"
+pages_build_output_dir = "."
+
+# Criar uma vez com:  npx wrangler d1 create ritmo
+# e colar o id devolvido aqui.
+[[d1_databases]]
+binding       = "DB"
+database_name = "ritmo"
+database_id   = "PREENCHER-COM-O-ID-DO-D1"

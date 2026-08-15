@@ -1,0 +1,28 @@
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
+
+# O service worker é quem entrega rápido (ver sw.js). O navegador só precisa
+# revalidar — um 304 é barato e garante que uma correção chegue no mesmo dia.
+/
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/app.js
+  Cache-Control: no-cache
+/sync.js
+  Cache-Control: no-cache
+/estilo.css
+  Cache-Control: no-cache
+
+# Fontes são imutáveis: o conteúdo nunca muda sem o nome mudar junto.
+/fontes/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Dados nunca ficam em cache compartilhado.
+/api/*
+  Cache-Control: no-store

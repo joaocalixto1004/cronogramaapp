@@ -1,0 +1,12 @@
+{
+  "name": "ritmo",
+  "private": true,
+  "type": "module",
+  "description": "Cronograma de residência médica. Sem dependências — este arquivo existe para o Node tratar os .js como módulos ES e para dar um atalho aos comandos. wrangler e playwright entram por npx, sob demanda, para não pesar no build do Pages.",
+  "scripts": {
+    "test": "node --test",
+    "dev": "npx wrangler@4 pages dev --port 8788",
+    "db:local": "npx wrangler@4 d1 execute ritmo --local --file=schema.sql",
+    "db:producao": "npx wrangler@4 d1 execute ritmo --remote --file=schema.sql"
+  }
+}

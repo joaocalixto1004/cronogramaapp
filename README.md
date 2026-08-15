@@ -3,58 +3,113 @@
 Site estático de página única para organizar o estudo para a residência: revisão espaçada,
 priorização automática por desempenho e incidência, e contagem regressiva até a prova.
 
-Sem servidor, sem banco de dados, sem custo. Os dados ficam no `localStorage` do navegador.
+Os dados sincronizam sozinhos entre o celular e o notebook, ficam atrás de login, e o app
+continua funcionando offline. Tudo dentro do plano gratuito da Cloudflare.
 
 ---
 
-## Subir no ar (GitHub + Cloudflare Pages)
+## Como os dados são guardados
 
-### 1. Criar o repositório
+O app grava um **log de eventos**, não um estado. Registrar um estudo acrescenta um fato
+(`{tema, data, acertos}`); a tela é sempre recalculada a partir do log inteiro.
 
-No GitHub, crie um repositório novo — pode ser **privado**, o Cloudflare publica igual.
-Sugestão de nome: `cronograma-residencia`.
+Isso resolve o problema de usar dois aparelhos: como só existem inserções, nunca
+sobrescritas, o celular offline e o notebook geram eventos diferentes e **os dois entram**.
+Não há conflito a resolver nem versão que ganha.
 
-Pelo terminal, dentro da pasta com estes arquivos:
+```
+navegador                          borda Cloudflare          dados
+─────────                          ────────────────          ─────
+localStorage (log de eventos)  ←→  Pages Functions       ←→  D1 (tabela eventos)
+   ↓ derivar()                     /api/eventos
+estado renderizado                 protegido por Access
+```
+
+Registrar um estudo grava local e devolve o controle na hora — a tela nunca espera a rede.
+O que ainda não subiu fica marcado como pendente e sobrevive a fechar o app; o envio
+acontece sozinho quando há sinal. O rodapé mostra o estado.
+
+---
+
+## Subir no ar
+
+Só é preciso fazer isto uma vez.
+
+### 1. Repositório
+
+Pode ser privado — o Cloudflare publica igual.
 
 ```bash
 git init
 git add .
-git commit -m "Cronograma de residência"
+git commit -m "Ritmo"
 git branch -M main
 git remote add origin https://github.com/SEU-USUARIO/cronograma-residencia.git
 git push -u origin main
 ```
 
-Se preferir sem terminal: no repositório vazio, use **Add file → Upload files**, arraste os
-quatro arquivos (`index.html`, `manifest.webmanifest`, `sw.js`, `icone.svg`) e confirme o commit.
+### 2. Banco D1
 
-### 2. Conectar ao Cloudflare Pages
+```bash
+npx wrangler@4 d1 create ritmo
+```
 
-1. Entre em <https://dash.cloudflare.com> → **Workers & Pages** → **Create** → aba **Pages**
-2. **Connect to Git** → autorize o GitHub → escolha o repositório
-3. Nas configurações de build, deixe assim:
+Copie o `database_id` devolvido para o `wrangler.toml` (substitui `PREENCHER-COM-O-ID-DO-D1`)
+e crie a tabela:
 
-   | Campo | Valor |
-   |---|---|
-   | Framework preset | `None` |
-   | Build command | *(vazio)* |
-   | Build output directory | `/` |
+```bash
+npm run db:producao
+```
 
-4. **Save and Deploy**
+### 3. Cloudflare Pages
 
-Em cerca de 30 segundos o site está em `https://cronograma-residencia.pages.dev`.
-Cada `git push` na branch `main` republica sozinho.
+**Workers & Pages** → **Create** → aba **Pages** → **Connect to Git** → escolha o repositório.
 
-### 3. Instalar no celular
+| Campo | Valor |
+|---|---|
+| Framework preset | `None` |
+| Build command | `sh build.sh` |
+| Build output directory | `/` |
+
+O build command não é opcional: é ele que carimba a versão do commit no `sw.js`. Sem isso
+o service worker mantém o mesmo nome de cache para sempre e o app instalado **nunca
+recebe atualização**.
+
+Depois do primeiro deploy, em **Settings → Functions → D1 database bindings**, ligue a
+variável `DB` ao banco `ritmo`.
+
+### 4. Login (Cloudflare Access)
+
+Grátis até 50 usuários. Em **Zero Trust → Access → Applications → Add an application →
+Self-hosted**:
+
+- **Public hostname**: o domínio do projeto. **Apague o `*` do campo de subdomínio** —
+  a política padrão cobre `*.projeto.pages.dev` mas deixa o apex `projeto.pages.dev`
+  aberto, e é fácil não perceber.
+- **Session duration**: 1 mês, senão o PWA pede login toda hora.
+- **Policy**: Allow → Emails → o seu e-mail.
+
+Anote o **Application Audience (AUD) tag** e o nome do seu time (`SEU-TIME` em
+`https://SEU-TIME.cloudflareaccess.com`). Em **Settings → Environment variables** do
+projeto Pages, adicione:
+
+| Variável | Valor |
+|---|---|
+| `ACCESS_TEAM` | `SEU-TIME` |
+| `ACCESS_AUD` | a tag AUD da aplicação |
+
+A API confere o token por conta própria, além da checagem que o Access já faz na borda.
+Sem essas duas variáveis ela **recusa tudo** — falha fechada, de propósito.
+
+### 5. Instalar no celular
 
 Abra o endereço no Chrome ou Safari → menu → **Adicionar à tela de início**.
-Vira ícone próprio e abre offline.
 
 ---
 
 ## Como o cronograma funciona
 
-**Fila de hoje** — os cinco temas com maior prioridade agora. A pontuação combina três coisas:
+**Fila de hoje** — os cinco temas com maior prioridade agora:
 
 ```
 prioridade = incidência na prova  ×10
@@ -62,8 +117,8 @@ prioridade = incidência na prova  ×10
            + urgência da revisão   (dias de atraso desde a data prevista)
 ```
 
-**Revisão espaçada** — ao registrar um estudo você informa o % de acertos nas questões,
-e o intervalo até a próxima revisão se ajusta:
+**Revisão espaçada** — ao registrar um estudo você informa o % de acertos, e o intervalo
+até a próxima revisão se ajusta:
 
 | Acertos | O que acontece | Próxima revisão |
 |---|---|---|
@@ -71,31 +126,81 @@ e o intervalo até a próxima revisão se ajusta:
 | 60–79% | mantém o degrau | repete o intervalo atual |
 | < 60% | reinicia o ciclo | no dia seguinte |
 
+Os estudos são reaplicados em ordem de **data de estudo**, não de registro — se você
+registrar hoje um estudo de anteontem, ele entra na posição cronológica certa.
+
 **Traçado de retenção** — a curvinha à direita de cada tema mostra o histórico: cada estudo
 levanta a linha, e ela decai até a próxima revisão. Verde acima de 80%, âmbar entre 60 e 80,
-vermelho abaixo. Serve para bater o olho e ver onde a memória está caindo.
+vermelho abaixo.
 
-**Peso dos temas** — a bolinha antes do nome indica incidência: vermelha = alta, âmbar = média,
-cinza = baixa. Os 74 temas iniciais cobrem as cinco grandes áreas do acesso direto. Ajuste os
-pesos conforme o perfil da sua banca — quem faz ENARE e quem faz USP não tem a mesma distribuição.
+**Peso dos temas** — a bolinha antes do nome indica incidência: vermelha = alta, âmbar =
+média, cinza = baixa. Os 75 temas iniciais cobrem as cinco grandes áreas do acesso direto.
+Ajuste os pesos conforme o perfil da sua banca — quem faz ENARE e quem faz USP não tem a
+mesma distribuição.
 
 ---
 
-## Backup e troca de aparelho
+## Backup
 
-`localStorage` é por navegador e por dispositivo. Para levar o histórico do notebook para o
-celular, use **exportar .json** de um lado e **importar** do outro. Vale exportar uma vez por
-semana — se você limpar os dados do navegador, o histórico vai junto.
+Não é mais tarefa sua: o histórico fica no D1 e chega sozinho em qualquer aparelho onde
+você entrar. O **exportar .json** continua ali como saída de emergência, para levar os
+dados para fora.
 
-Se um dia a sincronização automática fizer falta, dá para trocar o `localStorage` por Supabase
-(plano gratuito) sem mexer no resto do código: as únicas funções que tocam em armazenamento são
-`carregar()` e `salvar()`.
+**Importar nunca substitui** — os eventos do arquivo são unidos aos que já existem, e os
+repetidos são ignorados pelo id. Não há como um arquivo errado apagar seu histórico.
+
+Quem já usava a versão anterior não precisa fazer nada: na primeira abertura o histórico
+guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
+(`ritmo.v1`) é preservada como rede de segurança.
+
+---
+
+## Desenvolvimento
+
+```bash
+npm test                 # 25 testes da lógica, sem dependências
+npm run db:local         # cria a tabela no D1 local
+npm run dev              # http://localhost:8788
+```
+
+Para rodar local é preciso um arquivo `.dev.vars` (já no `.gitignore`) com:
+
+```
+MODO_DEV=1
+```
+
+`MODO_DEV` desliga a verificação do Access — por isso ele mora só no `.dev.vars` e nunca
+vai para o Pages.
+
+Os testes de navegador (fluxo completo, CSP, offline, migração) precisam do servidor no ar
+e do Playwright instalado sob demanda:
+
+```bash
+npx playwright@latest install --with-deps chromium
+npm i --no-save playwright
+node testes/navegador/fluxo.mjs
+node testes/navegador/migracao.mjs
+```
+
+---
 
 ## Arquivos
 
 ```
-index.html            todo o app — HTML, CSS e JS, sem dependências
-manifest.webmanifest  instalação como aplicativo
-sw.js                 cache para uso offline
-icone.svg             ícone
+index.html               markup
+estilo.css               estilos e fontes locais
+logica.js                catálogo, revisão espaçada, derivação  (puro, testável)
+sync.js                  fila offline e conversa com a API
+app.js                   render e interações
+sw.js                    cache offline, versão carimbada no build
+_headers                 CSP e política de cache
+build.sh                 carimba o commit no sw.js
+wrangler.toml            binding do D1
+schema.sql               tabela de eventos
+functions/api/eventos.js       GET (por cursor) e POST (idempotente)
+functions/api/_middleware.js   verifica o JWT do Cloudflare Access
+fontes/                  IBM Plex, subset latino
+testes/                  node --test
+manifest.webmanifest     instalação como aplicativo
+icone.svg                ícone
 ```
