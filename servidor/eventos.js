@@ -52,7 +52,7 @@ function limpar(ev) {
 }
 
 /* ---------- leitura ---------- */
-export async function onRequestGet({ request, env }) {
+export async function lerEventos(request, env) {
   const bruto = new URL(request.url).searchParams.get("desde") ?? "0";
   const desde = Number(bruto);
   if (!Number.isInteger(desde) || desde < 0) return erro(400, "cursor inválido");
@@ -79,7 +79,7 @@ export async function onRequestGet({ request, env }) {
 }
 
 /* ---------- escrita ---------- */
-export async function onRequestPost({ request, env }) {
+export async function gravarEventos(request, env) {
   let corpo;
   try {
     corpo = await request.json();

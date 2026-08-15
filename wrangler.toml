@@ -1,9 +1,16 @@
 name = "ritmo"
+main = "worker.js"
 compatibility_date = "2026-08-01"
-pages_build_output_dir = "."
 
-# Criar uma vez com:  npx wrangler d1 create ritmo
-# e colar o id devolvido aqui.
+# O site sai de publico/, montado por build.sh — e não da raiz do repositório.
+# Servir a raiz publicaria schema.sql, wrangler.toml, package.json e testes/.
+[assets]
+directory = "./publico"
+binding = "ASSETS"
+
+# Criar uma vez com:  npx wrangler@4 d1 create ritmo
+# e colar o id devolvido aqui. Diferente do Pages, esta binding vale também
+# em produção — não precisa repetir no painel.
 [[d1_databases]]
 binding       = "DB"
 database_name = "ritmo"

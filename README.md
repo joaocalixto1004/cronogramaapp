@@ -20,7 +20,7 @@ Não há conflito a resolver nem versão que ganha.
 ```
 navegador                          borda Cloudflare          dados
 ─────────                          ────────────────          ─────
-localStorage (log de eventos)  ←→  Pages Functions       ←→  D1 (tabela eventos)
+localStorage (log de eventos)  ←→  Worker /api/eventos   ←→  D1 (tabela eventos)
    ↓ derivar()                     /api/eventos
 estado renderizado                 protegido por Access
 ```
@@ -67,22 +67,23 @@ e crie a tabela:
 npm run db:producao
 ```
 
-### 3. Cloudflare Pages
+### 3. Worker
 
-**Workers & Pages** → **Create** → aba **Pages** → **Connect to Git** → escolha o repositório.
+Em **Workers & Pages** → **Create** → **Workers** → **Connect to Git**, escolha o
+repositório e configure:
 
 | Campo | Valor |
 |---|---|
-| Framework preset | `None` |
 | Build command | `sh build.sh` |
-| Build output directory | `/` |
+| Deploy command | `npx wrangler deploy` |
 
-O build command não é opcional: é ele que carimba a versão do commit no `sw.js`. Sem isso
-o service worker mantém o mesmo nome de cache para sempre e o app instalado **nunca
-recebe atualização**.
+O build command não é opcional. É ele que monta `publico/` — sem isso não existe
+diretório de assets para publicar — e que carimba a versão do commit no `sw.js`. Sem o
+carimbo, o service worker mantém o mesmo nome de cache para sempre e o app instalado
+**nunca recebe atualização**.
 
-Depois do primeiro deploy, em **Settings → Functions → D1 database bindings**, ligue a
-variável `DB` ao banco `ritmo`.
+A binding do D1 já está no `wrangler.toml` e vale em produção: não precisa repetir
+no painel.
 
 ### 4. Login (Cloudflare Access)
 
@@ -90,14 +91,14 @@ Grátis até 50 usuários. Em **Zero Trust → Access → Applications → Add a
 Self-hosted**:
 
 - **Public hostname**: o domínio do projeto. **Apague o `*` do campo de subdomínio** —
-  a política padrão cobre `*.projeto.pages.dev` mas deixa o apex `projeto.pages.dev`
-  aberto, e é fácil não perceber.
+  a política padrão cobre `*.projeto.workers.dev` mas deixa o apex de fora, e é fácil
+  não perceber.
 - **Session duration**: 1 mês, senão o PWA pede login toda hora.
 - **Policy**: Allow → Emails → o seu e-mail.
 
 Anote o **Application Audience (AUD) tag** e o nome do seu time (`SEU-TIME` em
-`https://SEU-TIME.cloudflareaccess.com`). Em **Settings → Environment variables** do
-projeto Pages, adicione:
+`https://SEU-TIME.cloudflareaccess.com`). Em **Settings → Variables and Secrets** do
+Worker, adicione:
 
 | Variável | Valor |
 |---|---|
@@ -164,9 +165,9 @@ guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
 ## Desenvolvimento
 
 ```bash
-npm test                 # 25 testes da lógica, sem dependências
+npm test                 # 43 testes da lógica, sem dependências
 npm run db:local         # cria a tabela no D1 local
-npm run dev              # http://localhost:8788
+npm run dev              # monta publico/ e sobe em http://localhost:8788
 ```
 
 Para rodar local é preciso um arquivo `.dev.vars` (já no `.gitignore`) com:
@@ -176,7 +177,7 @@ MODO_DEV=1
 ```
 
 `MODO_DEV` desliga a verificação do Access — por isso ele mora só no `.dev.vars` e nunca
-vai para o Pages.
+vai para a Cloudflare.
 
 Os testes de navegador (fluxo completo, CSP, offline, migração) precisam do servidor no ar
 e do Playwright instalado sob demanda:
@@ -197,16 +198,18 @@ index.html               markup
 estilo.css               estilos e fontes locais
 logica.js                catálogo, revisão espaçada, derivação  (puro, testável)
 sync.js                  fila offline e conversa com a API
-app.js                   render e interações
+app.js                   render incremental e interações
 sw.js                    cache offline, versão carimbada no build
 _headers                 CSP e política de cache
-build.sh                 carimba o commit no sw.js
-wrangler.toml            binding do D1
+worker.js                entrada: roteia /api/* e delega o resto aos assets
+servidor/acesso.js       verifica o JWT do Cloudflare Access
+servidor/eventos.js      GET (por cursor) e POST (idempotente)
+build.sh                 monta publico/ e carimba o commit no sw.js
+wrangler.toml            entrada, assets e binding do D1
 schema.sql               tabela de eventos
-functions/api/eventos.js       GET (por cursor) e POST (idempotente)
-functions/api/_middleware.js   verifica o JWT do Cloudflare Access
 fontes/                  IBM Plex, subset latino
-testes/                  node --test
+testes/                  node --test  +  roteiros de navegador
 manifest.webmanifest     instalação como aplicativo
 icone.svg                ícone
+publico/                 saída do build (não versionada)
 ```

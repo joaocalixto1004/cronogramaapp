@@ -1,14 +1,14 @@
 /* Verificação do JWT do Cloudflare Access.
  *
  * O Access já barra o tráfego na borda, mas a política do painel tem uma
- * pegadinha conhecida: ela cobre `*.projeto.pages.dev` e deixa o apex
- * `projeto.pages.dev` de fora se o curinga não for removido na criação.
- * URLs de preview são outra porta fácil de esquecer. Como o custo aqui é uma
- * verificação de assinatura em memória, a API confere por conta própria em vez
- * de confiar que a configuração do painel está certa.
+ * pegadinha conhecida: ela cobre `*.projeto.workers.dev` e deixa o apex de
+ * fora se o curinga não for removido na criação. URLs de preview são outra
+ * porta fácil de esquecer. Como o custo aqui é uma verificação de assinatura
+ * em memória, a API confere por conta própria em vez de confiar que a
+ * configuração do painel está certa.
  *
- * Este middleware fica sob functions/api/ de propósito: não deve interceptar
- * a entrega dos arquivos estáticos.
+ * Só o worker chama isto, e só para /api/*: a entrega dos arquivos estáticos
+ * não passa por aqui.
  */
 
 const JWKS_TTL = 3600e3; // 1 h
@@ -92,10 +92,11 @@ async function verificar(token, time, aud) {
   return c;
 }
 
-export async function onRequest({ request, env, next }) {
+/** Devolve uma Response quando o acesso é negado, ou null quando pode seguir. */
+export async function barrarAcesso(request, env) {
   // Escape hatch só de desenvolvimento. MODO_DEV mora no .dev.vars, que está
-  // no .gitignore e nunca sobe para o Pages — em produção esta linha é falsa.
-  if (env.MODO_DEV === "1") return next();
+  // no .gitignore e nunca sobe para a Cloudflare — em produção isto é falso.
+  if (env.MODO_DEV === "1") return null;
 
   const { ACCESS_TEAM, ACCESS_AUD } = env;
   if (!ACCESS_TEAM || !ACCESS_AUD) {
@@ -126,5 +127,5 @@ export async function onRequest({ request, env, next }) {
     );
   }
 
-  return next();
+  return null;
 }
