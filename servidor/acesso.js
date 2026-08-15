@@ -93,16 +93,28 @@ async function verificar(token, time, aud) {
 }
 
 /** Devolve uma Response quando o acesso é negado, ou null quando pode seguir. */
-export async function barrarAcesso(request, env) {
+export async function barrarAcesso(request, env, ctx) {
   // Escape hatch só de desenvolvimento. MODO_DEV mora no .dev.vars, que está
   // no .gitignore e nunca sobe para a Cloudflare — em produção isto é falso.
   if (env.MODO_DEV === "1") return null;
 
+  // Caminho 1: Access ligado no próprio Worker (Access tab → All traffic).
+  // A plataforma já autenticou e entrega a identidade pronta — é a única
+  // forma que funciona em workers.dev, porque aplicação self-hosted exige um
+  // domínio que seja zona da sua conta. Nada a configurar aqui.
+  try {
+    const identidade = await ctx?.access?.getIdentity?.();
+    if (identidade?.email) return null;
+  } catch (e) {
+    console.warn("ctx.access indisponível, caindo para o JWT:", e);
+  }
+
+  // Caminho 2: aplicação self-hosted em domínio próprio, com o JWT no header.
   const { ACCESS_TEAM, ACCESS_AUD } = env;
   if (!ACCESS_TEAM || !ACCESS_AUD) {
-    // Falha fechada: sem configuração não há como autenticar, então nada passa.
+    // Falha fechada: nenhum dos dois caminhos provou identidade.
     return Response.json(
-      { erro: "ACCESS_TEAM/ACCESS_AUD não configurados" },
+      { erro: "sem autenticação: ligue o Access no Worker ou defina ACCESS_TEAM/ACCESS_AUD" },
       { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }

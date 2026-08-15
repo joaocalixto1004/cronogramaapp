@@ -21,7 +21,7 @@ Não há conflito a resolver nem versão que ganha.
 navegador                          borda Cloudflare          dados
 ─────────                          ────────────────          ─────
 localStorage (log de eventos)  ←→  Worker /api/eventos   ←→  D1 (tabela eventos)
-   ↓ derivar()                     /api/eventos
+   ↓ derivar()
 estado renderizado                 protegido por Access
 ```
 
@@ -95,26 +95,33 @@ no painel.
 
 ### 4. Login (Cloudflare Access)
 
-Grátis até 50 usuários. Em **Zero Trust → Access → Applications → Add an application →
-Self-hosted**:
+Grátis até 50 usuários. **No Worker**, não no Zero Trust: abra o Worker → aba
+**Access** → **Protect this Worker behind Access** → **All traffic** → defina a política
+(Allow → Emails → o seu e-mail) → **Apply Access**.
 
-- **Public hostname**: o domínio do projeto. **Apague o `*` do campo de subdomínio** —
-  a política padrão cobre `*.projeto.workers.dev` mas deixa o apex de fora, e é fácil
-  não perceber.
-- **Session duration**: 1 mês, senão o PWA pede login toda hora.
-- **Policy**: Allow → Emails → o seu e-mail.
+O caminho pelo Zero Trust (*Add an application → Self-hosted*) **não funciona em
+`workers.dev`**: aplicação self-hosted exige que o hostname pertença a uma zona ativa da
+sua conta, e `workers.dev` é domínio compartilhado da Cloudflare. A política é criada,
+mas nunca casa, e nenhuma tela de login aparece. Esse caminho só passa a valer se você
+apontar um domínio próprio para o Worker.
 
-Anote o **Application Audience (AUD) tag** e o nome do seu time (`SEU-TIME` em
-`https://SEU-TIME.cloudflareaccess.com`). Em **Settings → Variables and Secrets** do
-Worker, adicione:
+Ligado assim, a plataforma autentica antes de o código rodar e entrega a identidade
+pronta em `ctx.access` — não há nada a configurar no repositório.
+
+**Se um dia usar domínio próprio**, aí sim vale a aplicação self-hosted, e o Worker passa
+a verificar o token por conta própria. Nesse caso, anote o **Application Audience (AUD)
+tag** e o nome do time (`SEU-TIME` em `https://SEU-TIME.cloudflareaccess.com`) e
+adicione em **Settings → Variables and Secrets**:
 
 | Variável | Valor |
 |---|---|
 | `ACCESS_TEAM` | `SEU-TIME` |
 | `ACCESS_AUD` | a tag AUD da aplicação |
 
-A API confere o token por conta própria, além da checagem que o Access já faz na borda.
-Sem essas duas variáveis ela **recusa tudo** — falha fechada, de propósito.
+E aí lembre de apagar o `*` do campo de subdomínio ao criar a aplicação: a política
+padrão cobre os subdomínios mas deixa o apex de fora.
+
+Sem nenhum dos dois caminhos, a API **recusa tudo** — falha fechada, de propósito.
 
 ### 5. Instalar no celular
 
@@ -124,7 +131,11 @@ Abra o endereço no Chrome ou Safari → menu → **Adicionar à tela de início
 
 ## Como o cronograma funciona
 
-**Fila de hoje** — os cinco temas com maior prioridade agora:
+**Fila de hoje** — a meta do dia: o que já venceu, mais a fatia dos temas ainda não
+vistos que cabe no tempo que falta até a prova. A fila encolhe conforme você cumpre, e
+avisa quando zera em vez de sugerir mais. Sem prova marcada, um passo fixo de 5.
+
+A ordem dentro da fila vem da prioridade:
 
 ```
 prioridade = incidência na prova  ×10
@@ -173,7 +184,7 @@ guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
 ## Desenvolvimento
 
 ```bash
-npm test                 # 43 testes da lógica, sem dependências
+npm test                 # 52 testes de lógica e autenticação, sem dependências
 npm run db:local         # cria a tabela no D1 local
 npm run dev              # monta publico/ e sobe em http://localhost:8788
 ```

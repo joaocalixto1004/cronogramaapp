@@ -12,7 +12,7 @@ const json = (corpo, status = 200) =>
   Response.json(corpo, { status, headers: { "Cache-Control": "no-store" } });
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith("/api/")) {
@@ -22,7 +22,7 @@ export default {
       return new Response("não encontrado", { status: 404 });
     }
 
-    const barrado = await barrarAcesso(request, env);
+    const barrado = await barrarAcesso(request, env, ctx);
     if (barrado) return barrado;
 
     if (url.pathname === "/api/eventos") {

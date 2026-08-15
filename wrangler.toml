@@ -1,4 +1,6 @@
-name = "ritmo"
+# Precisa bater com o nome do Worker na Cloudflare, senão o build avisa que
+# houve divergência e abre um pull request automático para "corrigir".
+name = "cronogramaapp"
 main = "worker.js"
 compatibility_date = "2026-08-01"
 
