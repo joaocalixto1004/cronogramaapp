@@ -18,8 +18,8 @@ const CHAVE_ANTIGA = "ritmo.v1";
 const MARCA_MIGRACAO = "ritmo.migrado.v2";
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Não há mais escape de HTML neste arquivo: todo texto vindo do usuário entra
+// por textContent. O único innerHTML restante é o SVG do traço, gerado aqui.
 
 /* ---------- estado de tela ---------- */
 let dados = { prova: { nome: "a prova", data: "" }, temas: [] };
@@ -108,6 +108,161 @@ function sequencia() {
   return n;
 }
 
+/* ---------- render incremental ----------
+   Antes, cada ação refazia o innerHTML da lista inteira: 75 linhas e 75 SVGs
+   reconstruídos para mudar uma. Agora cada tema tem um nó de DOM próprio,
+   reaproveitado entre renders, e só o que mudou é reescrito.
+
+   De quebra, o texto vindo do usuário passa a entrar por textContent em vez
+   de concatenação de HTML — não há mais o que escapar. */
+
+const MOLDE_LINHA = document.createElement("template");
+MOLDE_LINHA.innerHTML =
+  `<div class="row"><div class="main">` +
+  `<div class="tema"><i class="peso"></i><span class="nome"></span></div>` +
+  `<div class="meta"></div></div>` +
+  `<div class="right"><span class="traco"></span>` +
+  `<button class="reg">registrar</button>` +
+  `<button class="del" title="remover tema">×</button></div></div>`;
+
+const MOLDE_AREA = document.createElement("template");
+MOLDE_AREA.innerHTML =
+  `<section class="areablock"><div class="areahead">` +
+  `<h3></h3><div class="bar-prog"><i></i></div><span class="eyebrow"></span>` +
+  `</div></section>`;
+
+const linhas = new Map();   // id do tema -> nó e assinaturas
+const blocos = new Map();   // área -> nó
+
+/* Assinaturas: o que precisa mudar na tela para a linha valer um retoque.
+   O traço tem a sua própria porque gerar o SVG é o passo caro. */
+const assinaturaLinha = (t, hj) =>
+  `${t.nome}|${t.area}|${t.peso}|${t.proxima}|${ultimo(t)?.d ?? ""}|${ultimo(t)?.a ?? ""}|${hj}`;
+const assinaturaTraco = (t, hj) =>
+  `${hj}|${t.historico.slice(-4).map((h) => h.d + ":" + h.a).join(",")}`;
+
+function criarLinha(id) {
+  const el = MOLDE_LINHA.content.firstElementChild.cloneNode(true);
+  const reg = el.querySelector(".reg");
+  const del = el.querySelector(".del");
+  reg.dataset.reg = id;
+  del.dataset.del = id;
+  return {
+    el,
+    peso: el.querySelector(".peso"),
+    nome: el.querySelector(".nome"),
+    meta: el.querySelector(".meta"),
+    traco: el.querySelector(".traco"),
+    del,
+    assin: null,
+    assinTraco: null,
+  };
+}
+
+/** Os trechos de "último X • Y% acertos • revisar Z" da linha. */
+function pedacosMeta(t) {
+  const d = desempenho(t), a = atraso(t), u = ultimo(t);
+  const partes = [];
+  if (u) partes.push(["", `último ${fmt(u.d)}`]);
+  if (d !== null) partes.push([d >= 70 ? "ok" : "due", `${d}% acertos`]);
+  if (a !== null) partes.push(a > 0 ? ["due", `revisar — ${a}d atrás`] : ["", `revisar ${fmt(t.proxima)}`]);
+  if (!partes.length) partes.push(["", "ainda não estudado"]);
+  return partes;
+}
+
+function atualizarLinha(l, t, hj) {
+  const assin = assinaturaLinha(t, hj);
+  if (l.assin === assin) return;
+  l.assin = assin;
+
+  l.peso.className = `peso p${t.peso}`;
+  l.peso.title = `incidência ${t.peso}/3`;
+  l.nome.textContent = t.nome;
+  l.del.setAttribute("aria-label", `Remover ${t.nome}`);
+
+  l.meta.replaceChildren(...pedacosMeta(t).map(([classe, texto]) => {
+    const s = document.createElement("span");
+    if (classe) s.className = classe;
+    s.textContent = texto;
+    return s;
+  }));
+
+  const at = assinaturaTraco(t, hj);
+  if (l.assinTraco !== at) {
+    l.assinTraco = at;
+    l.traco.innerHTML = tracado(t);      // SVG gerado por nós, sem dado do usuário
+  }
+}
+
+function renderLista(ts) {
+  const hj = hoje();
+  let visiveis = ts;
+  if (filtro === "pendentes") visiveis = ts.filter((t) => { const a = atraso(t); return a === null || a >= 0; });
+  if (filtro === "fracos") visiveis = ts.filter((t) => { const d = desempenho(t); return d !== null && d < 70; });
+
+  const alvo = $("lista");
+  const ordem = AREAS.concat([...new Set(ts.map((t) => t.area))].filter((a) => !AREAS.includes(a)));
+  const mostrados = new Set();
+  const secoes = [];
+
+  for (const area of ordem) {
+    const doGrupo = visiveis.filter((t) => t.area === area).sort((a, b) => prioridade(b, hj) - prioridade(a, hj));
+    if (!doGrupo.length) continue;
+
+    let bloco = blocos.get(area);
+    if (!bloco) {
+      const el = MOLDE_AREA.content.firstElementChild.cloneNode(true);
+      el.querySelector("h3").textContent = area;
+      bloco = { el, barra: el.querySelector(".bar-prog i"), pct: el.querySelector(".eyebrow") };
+      blocos.set(area, bloco);
+    }
+
+    const todos = ts.filter((t) => t.area === area);
+    const pct = todos.length ? Math.round((todos.filter((t) => t.historico.length).length / todos.length) * 100) : 0;
+    // Largura pelo CSSOM: a CSP estrita bloqueia style="" no markup, não isto.
+    bloco.barra.style.width = pct + "%";
+    bloco.pct.textContent = pct + "%";
+
+    // Percorre na ordem desejada arrastando uma âncora: só encosta no DOM
+    // a linha que está fora de lugar. O cabeçalho da área é a âncora inicial.
+    let ancora = bloco.el.firstElementChild;
+    for (const t of doGrupo) {
+      let l = linhas.get(t.id);
+      if (!l) { l = criarLinha(t.id); linhas.set(t.id, l); }
+      atualizarLinha(l, t, hj);
+      mostrados.add(t.id);
+      if (ancora.nextSibling !== l.el) bloco.el.insertBefore(l.el, ancora.nextSibling);
+      ancora = l.el;
+    }
+    secoes.push(bloco.el);
+  }
+
+  // Sai do DOM mas fica no cache: alternar filtro é a ação mais repetida, e
+  // reconstruir a linha (incluindo o SVG) só para ela voltar seria desperdício.
+  // O cache é limitado pelo número de temas que já existiram — dezenas.
+  for (const [id, l] of linhas) if (!mostrados.has(id)) l.el.remove();
+
+  if (!secoes.length) {
+    const p = document.createElement("p");
+    p.className = "semfiltro";
+    p.textContent = "Nenhum tema neste filtro.";
+    alvo.replaceChildren(p);
+    blocos.clear();
+    return;
+  }
+
+  // Mesma técnica de âncora para as seções: um filtro que esvazia uma área
+  // não deve remexer as outras.
+  if (alvo.firstElementChild?.className === "semfiltro") alvo.replaceChildren();
+  let ancora = null;
+  for (const sec of secoes) {
+    const esperado = ancora ? ancora.nextSibling : alvo.firstChild;
+    if (esperado !== sec) alvo.insertBefore(sec, esperado);
+    ancora = sec;
+  }
+  while (ancora.nextSibling) ancora.nextSibling.remove();
+}
+
 function renderFila(ts) {
   const { meta, feitos, itens, restam } = filaDeHoje(ts, dados.prova.data);
   const plural = (n) => (n > 1 ? "s" : "");
@@ -117,65 +272,41 @@ function renderFila(ts) {
     : itens.length ? `${itens.length} de ${meta} para hoje${feitos ? ` — ${feitos} já registrado${plural(feitos)}` : ""}`
     : `Meta do dia cumprida — ${feitos} registrado${plural(feitos)}`;
 
-  $("fila").innerHTML = itens.map((t) => {
-    const a = atraso(t);
-    const tag = a === null ? '<span class="tag novo">novo</span>'
-      : a > 0 ? `<span class="tag atr">${a}d atrás</span>`
-      : a === 0 ? '<span class="tag hoje">hoje</span>'
-      : '<span class="tag novo">antecipar</span>';
-    return `<li>${tag}<span class="nome">${esc(t.nome)}</span>
-      <span class="area">${esc(t.area.split(" ")[0])}</span>
-      <button data-reg="${esc(t.id)}">registrar</button></li>`;
-  }).join("") || `<li class="vazio">${
-    restam
+  if (!itens.length) {
+    const li = document.createElement("li");
+    li.className = "vazio";
+    li.textContent = restam
       ? "Meta do dia cumprida. Parar aqui é o que consolida — o resto está agendado."
-      : "Tudo em dia. Um descanso também consolida memória."
-  }</li>`;
-}
+      : "Tudo em dia. Um descanso também consolida memória.";
+    $("fila").replaceChildren(li);
+    return;
+  }
 
-function renderLista(ts) {
-  let visiveis = ts;
-  if (filtro === "pendentes") visiveis = ts.filter((t) => { const a = atraso(t); return a === null || a >= 0; });
-  if (filtro === "fracos") visiveis = ts.filter((t) => { const d = desempenho(t); return d !== null && d < 70; });
+  $("fila").replaceChildren(...itens.map((t) => {
+    const a = atraso(t);
+    const [classe, rotulo] =
+      a === null ? ["novo", "novo"]
+      : a > 0 ? ["atr", `${a}d atrás`]
+      : a === 0 ? ["hoje", "hoje"]
+      : ["novo", "antecipar"];
 
-  const ordem = AREAS.concat([...new Set(ts.map((t) => t.area))].filter((a) => !AREAS.includes(a)));
-  $("lista").innerHTML = ordem.map((area) => {
-    const doGrupo = visiveis.filter((t) => t.area === area).sort((a, b) => prioridade(b) - prioridade(a));
-    if (!doGrupo.length) return "";
-    const todos = ts.filter((t) => t.area === area);
-    const pct = todos.length ? Math.round((todos.filter((t) => t.historico.length).length / todos.length) * 100) : 0;
-    return `<section class="areablock">
-      <div class="areahead">
-        <h3>${esc(area)}</h3>
-        <div class="bar-prog"><i data-pct="${pct}"></i></div>
-        <span class="eyebrow">${pct}%</span>
-      </div>
-      ${doGrupo.map(linha).join("")}
-    </section>`;
-  }).join("") || '<p class="semfiltro">Nenhum tema neste filtro.</p>';
+    const li = document.createElement("li");
+    const tag = document.createElement("span");
+    tag.className = `tag ${classe}`;
+    tag.textContent = rotulo;
+    const nome = document.createElement("span");
+    nome.className = "nome";
+    nome.textContent = t.nome;
+    const area = document.createElement("span");
+    area.className = "area";
+    area.textContent = t.area.split(" ")[0];
+    const bt = document.createElement("button");
+    bt.dataset.reg = t.id;
+    bt.textContent = "registrar";
 
-  // A largura vai pelo CSSOM, não por style="": a CSP estrita bloqueia
-  // atributos de estilo no markup, mas não a manipulação via script.
-  for (const i of $("lista").querySelectorAll(".bar-prog i")) i.style.width = i.dataset.pct + "%";
-}
-
-function linha(t) {
-  const d = desempenho(t), a = atraso(t), u = ultimo(t);
-  const partes = [];
-  if (u) partes.push(`<span>último ${fmt(u.d)}</span>`);
-  if (d !== null) partes.push(`<span class="${d >= 70 ? "ok" : "due"}">${d}% acertos</span>`);
-  if (a !== null) partes.push(a > 0 ? `<span class="due">revisar — ${a}d atrás</span>` : `<span>revisar ${fmt(t.proxima)}</span>`);
-  if (!partes.length) partes.push("<span>ainda não estudado</span>");
-  return `<div class="row">
-    <div class="main">
-      <div class="tema"><i class="peso p${t.peso}" title="incidência ${t.peso}/3"></i>${esc(t.nome)}</div>
-      <div class="meta">${partes.join("")}</div>
-    </div>
-    <div class="right">${tracado(t)}
-      <button class="reg" data-reg="${esc(t.id)}">registrar</button>
-      <button class="del" data-del="${esc(t.id)}" title="remover tema" aria-label="Remover ${esc(t.nome)}">×</button>
-    </div>
-  </div>`;
+    li.append(tag, nome, area, bt);
+    return li;
+  }));
 }
 
 /* ---------- ponte com o log ---------- */
@@ -233,7 +364,7 @@ dlgReg.addEventListener("close", () => {
 const dlgNovo = $("dlgNovo");
 $("btnNovo").addEventListener("click", () => {
   const areas = [...new Set(AREAS.concat(dados.temas.map((t) => t.area)))];
-  $("nvArea").innerHTML = areas.map((a) => `<option>${esc(a)}</option>`).join("");
+  $("nvArea").replaceChildren(...areas.map((a) => new Option(a, a)));
   $("nvNome").value = "";
   dlgNovo.showModal();
 });
