@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "build": "sh build.sh",
+    "postinstall": "sh build.sh",
     "dev": "sh build.sh && npx wrangler@4 dev --port 8788",
     "db:local": "npx wrangler@4 d1 execute ritmo --local --file=schema.sql",
     "db:producao": "npx wrangler@4 d1 execute ritmo --remote --file=schema.sql"
