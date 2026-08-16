@@ -368,11 +368,35 @@ test("prova- remove só a prova indicada", () => {
 });
 
 test("o peso usado muda com o perfil da prova alvo", () => {
-  // MFC pesa 3 no ENAMED e 1 na SES-DF; o inverso vale para hemorragia digestiva.
-  const mfc = idTema("Medicina de Família e Comunidade", "Método clínico centrado na pessoa");
   const d = derivar([]);
-  const t = d.temas.find((x) => x.id === mfc);
-  assert.ok(prioridade(t, "2027-01-01", ENAMED) > prioridade(t, "2027-01-01", SESDF));
+  const pega = (a, n) => d.temas.find((x) => x.id === idTema(a, n));
+
+  // Preventiva vale 20% na SES-DF (16 de 80 questões, pelo edital) contra 12%
+  // no ENAMED, e com poucos temas — logo rende mais por tema na prova local.
+  const etica = pega("Medicina Preventiva", "Ética médica e bioética");
+  assert.ok(prioridade(etica, "2027-01-01", SESDF) > prioridade(etica, "2027-01-01", ENAMED),
+    "Preventiva tem de pesar mais no perfil da SES-DF");
+
+  // Ginecologia de menor incidência é o inverso: o ENAMED cobra mais GO.
+  const endo = pega("Ginecologia e Obstetrícia", "Endometriose");
+  assert.ok(prioridade(endo, "2027-01-01", ENAMED) > prioridade(endo, "2027-01-01", SESDF),
+    "GO tem de pesar mais no perfil do ENAMED");
+});
+
+test("a fatia de cada área bate com a fonte usada para os pesos", () => {
+  // Guarda-chuva: se alguém mexer na semente, isto acusa desvio grande do
+  // perfil pesquisado (ENAMED ~28% Clínica, SES-DF igual entre as cinco).
+  const porArea = {};
+  for (const [area, , e, s2] of SEMENTE) {
+    porArea[area] ??= { n: 0, e: 0, s: 0 };
+    porArea[area].n++; porArea[area].e += e; porArea[area].s += s2;
+  }
+  const med = (a, k) => porArea[a][k] / porArea[a].n;
+
+  assert.ok(med("Clínica Médica", "e") > med("Medicina Preventiva", "e"),
+    "no ENAMED, Clínica pesa mais que Preventiva");
+  assert.ok(med("Medicina Preventiva", "s") >= med("Clínica Médica", "s"),
+    "na SES-DF, Preventiva nao pode pesar menos que Clínica");
 });
 
 test("depois do ENAMED as revisões passam a mirar a SES-DF", () => {
