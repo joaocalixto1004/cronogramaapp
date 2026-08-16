@@ -29,6 +29,7 @@ let dados = { provas: [], rotina: ROTINA_PADRAO, simulados: [], temas: [] };
 let alvo = null;                 // prova mais próxima ainda não realizada
 let filtro = "todos";
 let alvoId = null;               // tema aberto no diálogo de registro
+let provaEditando = null;        // prova em correção no diálogo de provas
 
 const horas = (min) => {
   if (!min) return "0";
@@ -390,11 +391,15 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  const editProva = e.target.closest("[data-prova-edit]");
+  if (editProva) { editarProva(editProva.dataset.provaEdit); return; }
+
   const delProva = e.target.closest("[data-prova-del]");
   if (delProva) {
     const p = dados.provas.find((x) => x.prova === delProva.dataset.provaDel);
     if (!p) return;
     registrarEvento("prova-", { prova: p.prova });
+    if (provaEditando === p.prova) limparFormularioProva();
     renderListaProvas();
     avisar(`“${p.nome}” removida.`, {
       rotulo: "desfazer",
@@ -519,9 +524,13 @@ function renderListaProvas() {
   const alvoAtual = provaAlvo(dados.provas, hoje());
   const itens = dados.provas.map((p) => {
     const li = document.createElement("li");
+    if (p.prova === provaEditando) li.dataset.editando = "1";
 
-    const qual = document.createElement("span");
+    // Botão, não texto: editar precisa ser alcançável por teclado também.
+    const qual = document.createElement("button");
+    qual.type = "button";               // dentro de um form: não pode submeter
     qual.className = "qual";
+    qual.dataset.provaEdit = p.prova;
     qual.textContent = p.nome + (p.prova === alvoAtual?.prova ? " — alvo atual" : "");
 
     const quando = document.createElement("span");
@@ -548,24 +557,65 @@ function renderListaProvas() {
   $("listaProvas").replaceChildren(...itens);
 }
 
-$("btnProvas").addEventListener("click", () => {
-  renderListaProvas();
+/** Deixa o formulário pronto para cadastrar uma prova nova. */
+function limparFormularioProva() {
+  provaEditando = null;
   $("pvNome").value = "";
   $("pvData").value = "";
   $("pvPerfil").value = PERFIL_PADRAO;
+  $("btnSalvarProva").textContent = "salvar prova";
+}
+
+/** Carrega uma prova existente no formulário para correção. */
+function editarProva(id) {
+  const p = dados.provas.find((x) => x.prova === id);
+  if (!p) return;
+  provaEditando = p.prova;
+  $("pvNome").value = p.nome;
+  $("pvData").value = p.data;
+  $("pvPerfil").value = p.perfil;
+  $("btnSalvarProva").textContent = "atualizar prova";
+  renderListaProvas();
+  $("pvData").focus();
+}
+
+$("btnProvas").addEventListener("click", () => {
+  limparFormularioProva();
+  renderListaProvas();
   dlgProvas.showModal();
 });
 
 dlgProvas.addEventListener("close", () => {
+  const editava = provaEditando;
+  provaEditando = null;
   if (dlgProvas.returnValue !== "ok") return;
+
   const nome = $("pvNome").value.trim();
   const data = $("pvData").value;
   if (!nome || !data) { avisar("Prova precisa de nome e data."); return; }
 
   const id = slug(nome).slice(0, 60) || "prova-" + Date.now();
   const perfil = PERFIS.includes($("pvPerfil").value) ? $("pvPerfil").value : PERFIL_PADRAO;
+  const anterior = editava ? dados.provas.find((x) => x.prova === editava) : null;
+
   registrarEvento("prova", { prova: id, nome, data, perfil });
-  avisar(`${nome} em ${fmt(data)}.`);
+
+  // O id vem do slug do nome. Renomeando, o id muda — sem apagar o antigo
+  // sobraria uma prova órfã com o nome velho concorrendo pela contagem.
+  if (editava && editava !== id) registrarEvento("prova-", { prova: editava });
+
+  if (anterior) {
+    const mudou = anterior.data !== data ? `${fmt(anterior.data)} → ${fmt(data)}` : fmt(data);
+    avisar(`${nome}: ${mudou}`, {
+      rotulo: "desfazer",
+      aoClicar: () => {
+        registrarEvento("prova", anterior);
+        if (editava !== id) registrarEvento("prova-", { prova: id });
+      },
+    });
+  } else {
+    avisar(`${nome} em ${fmt(data)}.`);
+  }
 });
 
 /* ---------- diálogo: rotina ---------- */

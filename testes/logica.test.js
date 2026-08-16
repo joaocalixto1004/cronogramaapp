@@ -500,3 +500,58 @@ test("a rotina do log vale e é limitada a 16h por dia", () => {
   assert.equal(d.rotina[1], 90);
   assert.equal(d.rotina[6], 16 * 60, "valor absurdo é aparado, não aceito");
 });
+
+/* ---------- corrigir uma prova ---------- */
+
+test("regravar a mesma prova corrige a data em vez de duplicar", () => {
+  const d = derivar([
+    { id: "p1", tipo: "prova", ts: "2026-08-01T10:00:00.000Z",
+      dados: { prova: "enamed", nome: "ENAMED", data: "2028-09-20", perfil: "enamed" } },
+    { id: "p2", tipo: "prova", ts: "2026-08-02T10:00:00.000Z",
+      dados: { prova: "enamed", nome: "ENAMED", data: "2028-09-13", perfil: "enamed" } },
+  ]);
+  assert.equal(d.provas.length, 1, "é a mesma prova, não duas");
+  assert.equal(d.provas[0].data, "2028-09-13", "vale a correção mais recente");
+});
+
+test("corrigir a data reprograma as revisões já registradas", () => {
+  const base = estudo(ALVO, "2028-08-01", 95);
+  const comData = (data) => acha(derivar([
+    { id: "p", tipo: "prova", ts: "2026-08-01T10:00:00.000Z",
+      dados: { prova: "x", nome: "X", data, perfil: "enamed" } },
+    base,
+  ]), ALVO);
+
+  // A 10 dias da prova o intervalo encurta; a 2 anos, não.
+  assert.ok(comData("2028-08-11").proxima < comData("2030-08-11").proxima);
+});
+
+test("renomear cria o id novo e o antigo precisa sair junto", () => {
+  const eventos = [
+    { id: "p1", tipo: "prova", ts: "2026-08-01T10:00:00.000Z",
+      dados: { prova: "enare", nome: "ENARE", data: "2028-09-13", perfil: "enamed" } },
+    { id: "p2", tipo: "prova", ts: "2026-08-02T10:00:00.000Z",
+      dados: { prova: "enamed", nome: "ENAMED", data: "2028-09-13", perfil: "enamed" } },
+  ];
+  assert.equal(derivar(eventos).provas.length, 2, "sem remover, sobra a órfã com o nome velho");
+
+  const comRemocao = [...eventos, {
+    id: "p3", tipo: "prova-", ts: "2026-08-02T10:00:01.000Z", dados: { prova: "enare" },
+  }];
+  const d = derivar(comRemocao);
+  assert.equal(d.provas.length, 1);
+  assert.equal(d.provas[0].nome, "ENAMED");
+});
+
+test("a ordem entre remover a antiga e gravar a nova não importa", () => {
+  const gravar = { id: "p2", tipo: "prova", ts: "2026-08-02T10:00:00.000Z",
+    dados: { prova: "enamed", nome: "ENAMED", data: "2028-09-13", perfil: "enamed" } };
+  const remover = { id: "p3", tipo: "prova-", ts: "2026-08-02T10:00:01.000Z", dados: { prova: "enare" } };
+  const antiga = { id: "p1", tipo: "prova", ts: "2026-08-01T10:00:00.000Z",
+    dados: { prova: "enare", nome: "ENARE", data: "2028-09-13", perfil: "enamed" } };
+
+  const a = derivar([antiga, gravar, remover]).provas.map((p) => p.prova);
+  const b = derivar([antiga, remover, gravar]).provas.map((p) => p.prova);
+  assert.deepEqual(a, ["enamed"]);
+  assert.deepEqual(b, ["enamed"]);
+});

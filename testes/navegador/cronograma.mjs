@@ -47,9 +47,12 @@ const addProva = async (nome, data, perfil) => {
   await pag.locator("#pvPerfil").selectOption(perfil);
   await pag.locator("#dlgProvas button.btn:not(.sec)").click();
   await pag.locator("#dlgProvas").waitFor({ state: "hidden" });
-  // O aviso só é exibido depois de registrarEvento -> recalcular -> render,
-  // então esperá-lo é esperar a tela já refletir a prova nova.
-  await pag.locator("#aviso[data-visivel=\"1\"]").waitFor({ timeout: 5000 });
+  // Esperar só o aviso aparecer não basta: ele pode ter sobrado da prova
+  // anterior. O texto traz o nome, então dá para esperar por esta gravação.
+  await pag.waitForFunction(
+    (n) => (document.getElementById("avisoTexto")?.textContent ?? "").includes(n),
+    nome, { timeout: 6000 },
+  );
 };
 // Cadastra fora de ordem de propósito: a mais distante primeiro.
 await addProva("SES-DF", "2029-01-11", "sesdf");
@@ -72,6 +75,68 @@ const naLista = await pag.locator("#listaProvas li").count();
 const alvoMarcado = await pag.locator("#listaProvas li").first().textContent();
 naLista === 2 ? ok("as duas provas listadas") : erro(`${naLista} provas na lista`);
 /alvo atual/.test(alvoMarcado) ? ok("o alvo atual está sinalizado") : erro(`primeira linha: ${alvoMarcado}`);
+await pag.locator("#dlgProvas button.btn.sec").click();
+await pag.locator("#dlgProvas").waitFor({ state: "hidden" });
+
+/* ---------- 2b. corrigir uma prova ---------- */
+console.log("\n2b. Corrigir prova");
+
+// Espera o valor chegar em vez de ler logo: o handler de close roda depois
+// de o diálogo já contar como escondido.
+const esperaTexto = (sel, esperado, ms = 6000) =>
+  pag.waitForFunction(
+    ([s, e]) => (document.querySelector(s)?.textContent ?? "").trim() === e,
+    [sel, esperado], { timeout: ms },
+  ).then(() => true).catch(() => false);
+
+const salvarProva = async () => {
+  await pag.locator("#dlgProvas button.btn:not(.sec)").click();
+  await pag.locator("#dlgProvas").waitFor({ state: "hidden" });
+};
+
+await pag.locator("#btnProvas").click();
+await pag.locator("#dlgProvas").waitFor({ state: "visible" });
+await pag.locator(`[data-prova-edit="enamed"]`).click();
+
+const carregado = [await pag.locator("#pvNome").inputValue(), await pag.locator("#pvData").inputValue()];
+carregado[0] === "ENAMED" && carregado[1] === "2028-09-13"
+  ? ok("tocar na prova carrega nome e data no formulário")
+  : erro(`formulário veio com ${carregado.join(" / ")}`);
+(await txt("#btnSalvarProva")).includes("atualizar")
+  ? ok("o botão avisa que vai atualizar, não criar")
+  : erro("botão não mudou de rótulo");
+
+// A data errada vira quatro dias depois.
+await pag.locator("#pvData").fill("2028-09-17");
+await salvarProva();
+
+(await esperaTexto("#dias", String(dias + 4)))
+  ? ok(`contagem foi de ${dias} para ${dias + 4} dias`)
+  : erro(`dias = ${(await txt("#dias")).trim()}, esperava ${dias + 4}`);
+/17 de setembro/.test(await txt("#provaData"))
+  ? ok("a data nova aparece por extenso")
+  : erro(`provaData = ${await txt("#provaData")}`);
+
+await pag.locator("#btnProvas").click();
+await pag.locator("#dlgProvas").waitFor({ state: "visible" });
+const apos = await pag.locator("#listaProvas li").count();
+apos === 2 ? ok("corrigir não duplicou a prova") : erro(`${apos} provas depois da correção`);
+
+// Renomear muda o id: a prova antiga não pode sobrar órfã.
+await pag.locator(`[data-prova-edit="enamed"]`).click();
+await pag.locator("#pvNome").fill("ENAMED 2028");
+await salvarProva();
+
+(await esperaTexto("#provaNome", "ENAMED 2028"))
+  ? ok("renome aplicado")
+  : erro(`provaNome = ${(await txt("#provaNome")).trim()}`);
+
+await pag.locator("#btnProvas").click();
+await pag.locator("#dlgProvas").waitFor({ state: "visible" });
+const nomes = await pag.locator("#listaProvas li .qual").allTextContents();
+nomes.length === 2 && !nomes.some((t) => t.startsWith("ENAMED —"))
+  ? ok("o id antigo saiu junto, sem prova órfã")
+  : erro("sobrou: " + nomes.join(" | "));
 await pag.locator("#dlgProvas button.btn.sec").click();
 await pag.locator("#dlgProvas").waitFor({ state: "hidden" });
 
