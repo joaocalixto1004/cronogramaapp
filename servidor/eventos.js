@@ -30,6 +30,16 @@ const temDesempenho = (d) =>
   (inteiro(d.questoes, 1, 2000) && inteiro(d.certas, 0, 2000) && d.certas <= d.questoes);
 const minutosOpcionais = (d) => d.minutos === undefined || inteiro(d.minutos, 1, 16 * 60);
 
+// Caderno de erros: contagem por categoria, opcional, e uma anotação curta.
+const CATEGORIAS_ERRO = ["conhecimento", "interpretacao", "desatencao"];
+const errosOpcionais = (d) =>
+  d.erros === undefined ||
+  (d.erros && typeof d.erros === "object" && !Array.isArray(d.erros) &&
+    Object.keys(d.erros).every((k) => CATEGORIAS_ERRO.includes(k)) &&
+    Object.values(d.erros).every((v) => inteiro(v, 0, 2000)));
+const notaOpcional = (d) =>
+  d.nota === undefined || (typeof d.nota === "string" && d.nota.length <= 500);
+
 // Peso pode vir único (formato antigo) ou por perfil.
 const temPesos = (d) =>
   inteiro(d.peso, 1, 3) ||
@@ -37,7 +47,8 @@ const temPesos = (d) =>
     PERFIS.every((p) => inteiro(d.pesos[p], 1, 3)));
 
 const SCHEMAS = {
-  estudo: (d) => idTema(d.tema) && dataISO(d.data) && temDesempenho(d) && minutosOpcionais(d),
+  estudo: (d) => idTema(d.tema) && dataISO(d.data) && temDesempenho(d) && minutosOpcionais(d) &&
+    errosOpcionais(d) && notaOpcional(d),
   "estudo-": (d) => texto(d.evento, 100),
   "tema+": (d) => idTema(d.tema) && texto(d.nome, 120) && texto(d.area, 80) && temPesos(d),
   "tema-": (d) => idTema(d.tema),
@@ -71,7 +82,10 @@ function limpar(ev) {
 
   const dados =
     ev.tipo === "estudo"    ? so({ tema: ev.dados.tema, data: ev.dados.data, acertos: ev.dados.acertos,
-                                   questoes: ev.dados.questoes, certas: ev.dados.certas, minutos: ev.dados.minutos })
+                                   questoes: ev.dados.questoes, certas: ev.dados.certas, minutos: ev.dados.minutos,
+                                   erros: ev.dados.erros && Object.fromEntries(
+                                     CATEGORIAS_ERRO.filter((k) => ev.dados.erros[k]).map((k) => [k, ev.dados.erros[k]])),
+                                   nota: ev.dados.nota })
     : ev.tipo === "estudo-" ? { evento: ev.dados.evento }
     : ev.tipo === "tema+"   ? so({ tema: ev.dados.tema, nome: ev.dados.nome, area: ev.dados.area,
                                    peso: ev.dados.peso,

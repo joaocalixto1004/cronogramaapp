@@ -180,13 +180,40 @@ contagem. Sem questões, dá para estimar o domínio no controle deslizante.
 |---|---|---|
 | ≥ 80% | avança um degrau | 1 → 7 → 30 → 90 dias |
 | 60–79% | mantém o degrau | repete o intervalo atual |
-| < 60% | reinicia o ciclo | no dia seguinte |
+| < 60% | **cai um degrau** | volta ao intervalo anterior |
+
+A queda é de um degrau, não até o chão: um dia ruim não deve jogar à estaca zero um tema
+já consolidado. É o mesmo motivo que levou o Anki a abandonar o SM-2, onde a punição
+quase não se recuperava. Errar de novo continua descendo, então insistir no erro chega ao
+degrau mais baixo do mesmo jeito.
 
 **A prova aperta o ritmo.** O intervalo nunca passa da metade do tempo que falta: a 40
 dias da prova, o degrau de 90 marcaria a revisão para depois dela — ou seja, nunca.
 
 Os estudos são reaplicados em ordem de **data de estudo**, não de registro. Registrar hoje
 um estudo de anteontem o coloca na posição cronológica certa.
+
+### Caderno de erros
+
+Ao registrar, se houve questão errada o app pergunta **onde** o erro foi: falta de
+conhecimento, interpretação ou desatenção. A categoria vale mais que a contagem — erro por
+desatenção não se conserta estudando o tema de novo, e sem separar os dois você trata os
+dois igual. O painel mostra qual categoria mais te custa.
+
+### Nota projetada e simulados
+
+A projeção pondera o seu acerto em cada área pela fatia que ela ocupa na prova. Tema ainda
+não estudado entra valendo **25%**, o acerto ao acaso numa prova de quatro alternativas —
+é o que torna o número honesto em vez de otimista, e o que faz a cobertura aparecer nele.
+
+Simulado cronometrado entra por **simulado** e é comparado com a projeção. Quando os dois
+divergem, o simulado é o dado mais confiável.
+
+### A carga cabe no tempo?
+
+O painel compara as horas que a sua rotina oferece até a prova com as horas estimadas para
+cobrir o edital e sustentar as revisões. Quando não cabe, ele diz de quanto seria a semana
+necessária. Serve para descobrir em janeiro que o plano é impossível, e não em junho.
 
 ### Temas e pesos
 
@@ -220,7 +247,7 @@ guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
 ## Desenvolvimento
 
 ```bash
-npm test                 # 66 testes de lógica e autenticação, sem dependências
+npm test                 # 87 testes de lógica e autenticação, sem dependências
 npm run db:local         # cria a tabela no D1 local
 npm run dev              # monta publico/ e sobe em http://localhost:8788
                          # (o app é servido de publico/: rode build.sh depois de editar)

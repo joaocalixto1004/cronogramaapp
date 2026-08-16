@@ -242,6 +242,28 @@ export function intervaloAjustado(etapa, data, dataProva) {
   return Math.max(1, Math.min(base, Math.floor(restantes / 2)));
 }
 
+/* ---------- caderno de erros ----------
+   A categoria importa mais que a contagem: erro por desatenção não se conserta
+   estudando o tema de novo, e sem separar os dois você trata igual. */
+export const CATEGORIAS_ERRO = ["conhecimento", "interpretacao", "desatencao"];
+export const NOME_ERRO = {
+  conhecimento: "falta de conhecimento",
+  interpretacao: "interpretação",
+  desatencao: "desatenção",
+};
+
+function normalizarErros(e) {
+  if (!e || typeof e !== "object") return null;
+  const out = {};
+  let total = 0;
+  for (const k of CATEGORIAS_ERRO) {
+    const v = Number.isInteger(e[k]) && e[k] > 0 ? e[k] : 0;
+    if (v) out[k] = v;
+    total += v;
+  }
+  return total ? out : null;
+}
+
 /** Normaliza um registro de estudo para a forma guardada no histórico.
  *  Aceita os dois formatos: o antigo (`acertos` em %) e o novo (contagem). */
 export function normalizarRegistro(d) {
@@ -252,16 +274,23 @@ export function normalizarRegistro(d) {
     : Number.isFinite(d.acertos) ? Math.max(0, Math.min(100, Math.round(d.acertos)))
     : null;
   const m = Number.isInteger(d.minutos) && d.minutos > 0 ? d.minutos : null;
-  return { d: d.data, a, q, c, m };
+  const erros = normalizarErros(d.erros);
+  const nota = typeof d.nota === "string" && d.nota.trim() ? d.nota.trim().slice(0, 500) : null;
+  return { d: d.data, a, q, c, m, erros, nota };
 }
 
 export function aplicarEstudo(t, registro, dataProva = "") {
   const h = normalizarRegistro(registro);
   if (h.a === null) return;                  // sem desempenho não há o que agendar
   t.historico.push(h);
+
   if (h.a >= 80) t.etapa = Math.min(t.etapa + 1, INTERVALOS.length - 1);
-  else if (h.a < 60) t.etapa = 0;            // abaixo de 60% reinicia o ciclo
+  // Abaixo de 60% cai um degrau, não volta ao início: um dia ruim não deve
+  // jogar para a estaca zero um tema já consolidado. É o mesmo motivo que
+  // levou o Anki a trocar o SM-2, onde a punição não se recuperava.
+  else if (h.a < 60) t.etapa = Math.max(0, t.etapa - 1);
   // entre 60 e 79 consolida: mantém a etapa atual
+
   t.proxima = somaDias(h.d, intervaloAjustado(t.etapa, h.d, dataProva));
 }
 
@@ -351,6 +380,114 @@ export function planoDoDia(temas, rotina, provas, hj = hoje()) {
   };
 }
 
+/* ---------- leitura do desempenho ---------- */
+
+/** Acerto médio e cobertura de cada área, com a tendência dos últimos 90 dias.
+ *  É a visão que falta entre o número global e o traçado de um tema só — e é
+ *  nela que se decide realocar tempo. */
+export function desempenhoPorArea(temas, hj = hoje()) {
+  const corte = somaDias(hj, -90);
+  const mapa = new Map();
+
+  for (const t of temas) {
+    if (!mapa.has(t.area)) mapa.set(t.area, { area: t.area, total: 0, cobertos: 0, notas: [], recentes: [], antigas: [], questoes: 0 });
+    const a = mapa.get(t.area);
+    a.total++;
+    a.questoes += questoesFeitas(t);
+    if (!t.historico.length) continue;
+    a.cobertos++;
+    a.notas.push(desempenho(t));
+    for (const h of t.historico) (h.d >= corte ? a.recentes : a.antigas).push(h.a);
+  }
+
+  const media = (xs) => (xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : null);
+  return [...mapa.values()].map((a) => {
+    const recente = media(a.recentes), antigo = media(a.antigas);
+    return {
+      area: a.area, total: a.total, cobertos: a.cobertos, questoes: a.questoes,
+      pctCobertura: Math.round((a.cobertos / a.total) * 100),
+      acerto: media(a.notas),
+      // Sem uma das duas janelas não há tendência a afirmar.
+      tendencia: recente !== null && antigo !== null ? recente - antigo : null,
+    };
+  });
+}
+
+/* Fatia de cada área na prova, por perfil. Mesma fonte dos pesos da semente:
+   ENAMED da série INEP/Revalida, SES-DF do Anexo II do edital. */
+export const FATIA_AREA = {
+  enamed: {
+    "Clínica Médica": 28, "Ginecologia e Obstetrícia": 21, "Cirurgia": 19,
+    "Pediatria": 19, "Medicina Preventiva": 12, "Saúde Mental": 5,
+    "Medicina de Família e Comunidade": 5,
+  },
+  sesdf: {
+    "Clínica Médica": 20, "Cirurgia": 20, "Ginecologia e Obstetrícia": 20,
+    "Pediatria": 20, "Medicina Preventiva": 20, "Saúde Mental": 2,
+    "Medicina de Família e Comunidade": 4,
+  },
+};
+
+/** Chute em prova de 4 alternativas. Tema não estudado não vale zero. */
+export const ACERTO_AO_ACASO = 25;
+
+/** Nota projetada: acerto de cada área ponderado pela fatia que ela ocupa na
+ *  prova. Tema ainda não estudado entra no acaso — é o que torna o número
+ *  honesto em vez de otimista, e o que faz a cobertura aparecer nele. */
+export function notaProjetada(temas, perfil = PERFIL_PADRAO) {
+  const fatias = FATIA_AREA[perfil] ?? FATIA_AREA[PERFIL_PADRAO];
+  let peso = 0, soma = 0, cobertos = 0, total = 0;
+
+  for (const area of new Set(temas.map((t) => t.area))) {
+    const daArea = temas.filter((t) => t.area === area);
+    const fatia = fatias[area] ?? 0;
+    if (!fatia || !daArea.length) continue;
+
+    const notas = daArea.map((t) => (t.historico.length ? desempenho(t) : ACERTO_AO_ACASO));
+    soma += fatia * (notas.reduce((s, x) => s + x, 0) / notas.length);
+    peso += fatia;
+    cobertos += daArea.filter((t) => t.historico.length).length;
+    total += daArea.length;
+  }
+
+  return {
+    nota: peso ? Math.round(soma / peso) : null,
+    cobertura: total ? Math.round((cobertos / total) * 100) : 0,
+  };
+}
+
+/* ---------- a carga cabe no tempo? ----------
+   O equivalente ao "rebalance": descobrir em janeiro que o plano é impossível,
+   e não em junho. */
+export function viabilidade(temas, rotina, provas, hj = hoje()) {
+  const alvo = provaAlvo(provas, hj);
+  if (!alvo) return null;
+
+  const dias = diasEntre(hj, alvo.data);
+  if (dias <= 0) return null;
+
+  const grade = normalizarRotina(rotina) ?? ROTINA_PADRAO;
+  const porSemana = grade.reduce((s, m) => s + m, 0);
+  const disponiveis = Math.round((porSemana * dias) / 7);
+
+  // Uma primeira passada em cada tema ainda não visto, mais as revisões que a
+  // escada vai gerar até lá — estimadas pelo nº de degraus que cabem no prazo.
+  const novos = temas.filter((t) => !t.historico.length);
+  const primeira = novos.reduce((s, t) => s + duracaoTipica(t), 0);
+  const revisoesPorTema = INTERVALOS.filter((i) => i <= dias).length;
+  const revisao = temas.reduce((s, t) => s + duracaoTipica(t) * 0.5, 0) * revisoesPorTema;
+  const necessarios = Math.round(primeira + revisao);
+
+  return {
+    dias, disponiveis, necessarios,
+    folga: disponiveis - necessarios,
+    cabe: disponiveis >= necessarios,
+    // Quanto por semana seria preciso para caber.
+    semanaNecessaria: Math.round((necessarios * 7) / dias),
+    semanaAtual: porSemana,
+  };
+}
+
 /* ---------- derivação ----------
    Replay completo a cada mudança. Eventos de outro aparelho podem chegar com
    ts mais antigo que os locais, e só o replay em ordem cronológica produz a
@@ -371,6 +508,11 @@ export function derivar(eventos) {
   const provas = new Map();
   const simulados = [];
   let rotina = null;
+
+  // Anulações valem para estudo e simulado, então saem antes de qualquer um
+  // dos dois ser aplicado.
+  const anulados = new Set();
+  for (const ev of porTs) if (ev.tipo === "estudo-") anulados.add(ev.dados.evento);
 
   // 1) catálogo, provas e rotina primeiro, independente de data de estudo:
   //    um tema criado hoje pode receber um estudo datado de ontem.
@@ -409,7 +551,9 @@ export function derivar(eventos) {
         rotina = normalizarRotina(ev.dados.minutos) ?? rotina;
         break;
       case "simulado":
-        simulados.push({ ...normalizarRegistro(ev.dados), prova: ev.dados.prova ?? null });
+        if (!anulados.has(ev.id)) {
+          simulados.push({ ...normalizarRegistro(ev.dados), prova: ev.dados.prova ?? null });
+        }
         break;
     }
   }
@@ -419,9 +563,6 @@ export function derivar(eventos) {
   // 2) estudos, em ordem de data de estudo — não de criação do evento.
   //    Cada um mira a prova que ainda estava por vir naquela data, então
   //    depois do ENAMED passar as revisões passam a mirar a SES-DF sozinhas.
-  const anulados = new Set();
-  for (const ev of porTs) if (ev.tipo === "estudo-") anulados.add(ev.dados.evento);
-
   const estudos = eventos
     .filter((e) => e.tipo === "estudo" && !anulados.has(e.id))
     .sort((a, b) =>

@@ -12,6 +12,7 @@ import {
   slug, idTema, ID_VALIDO, somaDias, diasEntre,
   derivar, eventosDoFormatoAntigo,
   intervaloAjustado, planoDoDia, provaAlvo, fase, pesoDe, prioridade, normalizarRegistro,
+  notaProjetada, desempenhoPorArea, viabilidade, ACERTO_AO_ACASO,
   ROTINA_PADRAO, BLOCO_PADRAO,
 } from "../logica.js";
 
@@ -58,7 +59,7 @@ test("≥80% avança a escada de intervalos e satura no topo", () => {
   assert.equal(diasEntre(data === null ? "" : evs.at(-1).dados.data, t.proxima), 90);
 });
 
-test("<60% reinicia o ciclo para revisão no dia seguinte", () => {
+test("<60% cai um degrau (de etapa 1 volta para 0)", () => {
   const evs = [estudo(ALVO, "2026-01-01", 90), estudo(ALVO, "2026-01-10", 40)];
   const t = acha(derivar(evs), ALVO);
   assert.equal(t.etapa, 0);
@@ -578,4 +579,150 @@ test("a ordem entre remover a antiga e gravar a nova não importa", () => {
   const b = derivar([antiga, remover, gravar]).provas.map((p) => p.prova);
   assert.deepEqual(a, ["enamed"]);
   assert.deepEqual(b, ["enamed"]);
+});
+
+/* ---------- a queda é de um degrau, não até o chão ---------- */
+
+test("tema consolidado não volta à estaca zero por um dia ruim", () => {
+  // Sobe até a etapa 3 e então erra feio.
+  const evs = [];
+  let data = "2026-01-01";
+  for (let i = 0; i < 4; i++) { evs.push(estudo(ALVO, data, 95)); data = somaDias(data, 120); }
+  assert.equal(acha(derivar(evs), ALVO).etapa, 3);
+
+  evs.push(estudo(ALVO, data, 40));
+  const t = acha(derivar(evs), ALVO);
+  assert.equal(t.etapa, 2, "cai um degrau, não para 0");
+  assert.equal(t.proxima, somaDias(data, INTERVALOS[2]));
+});
+
+test("erros seguidos ainda levam ao degrau mais baixo", () => {
+  const evs = [];
+  let data = "2026-01-01";
+  for (let i = 0; i < 4; i++) { evs.push(estudo(ALVO, data, 95)); data = somaDias(data, 120); }
+  for (let i = 0; i < 4; i++) { evs.push(estudo(ALVO, data, 30)); data = somaDias(data, 5); }
+  assert.equal(acha(derivar(evs), ALVO).etapa, 0, "insistir no erro chega ao fundo");
+});
+
+/* ---------- caderno de erros ---------- */
+
+test("erros categorizados entram no histórico", () => {
+  const h = normalizarRegistro({
+    data: "2026-01-01", questoes: 20, certas: 14,
+    erros: { conhecimento: 4, desatencao: 2, interpretacao: 0 },
+    nota: "  confundi VPP com sensibilidade  ",
+  });
+  assert.deepEqual(h.erros, { conhecimento: 4, desatencao: 2 });
+  assert.equal(h.nota, "confundi VPP com sensibilidade", "anotação vem aparada");
+});
+
+test("registro sem erros não inventa campo", () => {
+  const h = normalizarRegistro({ data: "2026-01-01", questoes: 10, certas: 10 });
+  assert.equal(h.erros, null);
+  assert.equal(h.nota, null);
+});
+
+test("contagem de erro inválida é descartada, não quebra", () => {
+  for (const e of [null, "x", { conhecimento: -3 }, { conhecimento: 0 }, { outro: 5 }]) {
+    assert.equal(normalizarRegistro({ data: "2026-01-01", acertos: 50, erros: e }).erros, null);
+  }
+});
+
+/* ---------- nota projetada ---------- */
+
+test("sem nada estudado, a projeção é o acerto ao acaso", () => {
+  const d = derivar([]);
+  const p = notaProjetada(d.temas, "enamed");
+  assert.equal(p.nota, ACERTO_AO_ACASO);
+  assert.equal(p.cobertura, 0);
+});
+
+test("estudar bem sobe a projeção e a cobertura", () => {
+  const evs = SEMENTE.slice(0, 30).map(([a, n], i) => estudo(idTema(a, n), "2026-01-0" + ((i % 9) + 1), 90));
+  const d = derivar(evs);
+  const p = notaProjetada(d.temas, "enamed");
+  assert.ok(p.nota > ACERTO_AO_ACASO, `projeção ${p.nota} deveria passar do acaso`);
+  assert.ok(p.cobertura > 0 && p.cobertura < 100);
+});
+
+test("a mesma base projeta diferente em cada prova", () => {
+  // Estuda só Preventiva, que vale 20% na SES-DF e 12% no ENAMED.
+  const prev = SEMENTE.filter(([a]) => a === "Medicina Preventiva");
+  const evs = prev.map(([a, n], i) => estudo(idTema(a, n), "2026-01-0" + ((i % 9) + 1), 100));
+  const d = derivar(evs);
+  assert.ok(notaProjetada(d.temas, "sesdf").nota > notaProjetada(d.temas, "enamed").nota,
+    "cobrir Preventiva rende mais na SES-DF");
+});
+
+/* ---------- desempenho por área ---------- */
+
+test("desempenho por área traz cobertura, acerto e tendência", () => {
+  const tb = idTema("Clínica Médica", "Tuberculose");
+  const hj = "2026-06-01";
+  const d = derivar([
+    estudo(tb, "2026-01-01", 40),   // antigo, ruim
+    estudo(tb, "2026-05-20", 90),   // recente, bom
+  ]);
+  const cm = desempenhoPorArea(d.temas, hj).find((x) => x.area === "Clínica Médica");
+  assert.equal(cm.cobertos, 1);
+  assert.equal(cm.acerto, 90, "vale o último desempenho do tema");
+  assert.ok(cm.tendencia > 0, "melhorou nos últimos 90 dias");
+  assert.equal(cm.total, SEMENTE.filter(([a]) => a === "Clínica Médica").length);
+});
+
+test("sem histórico nas duas janelas não há tendência a afirmar", () => {
+  const d = derivar([estudo(idTema("Clínica Médica", "Tuberculose"), "2026-05-20", 90)]);
+  const cm = desempenhoPorArea(d.temas, "2026-06-01").find((x) => x.area === "Clínica Médica");
+  assert.equal(cm.tendencia, null);
+});
+
+/* ---------- a carga cabe? ---------- */
+
+test("rotina folgada e prazo longo cabem", () => {
+  const d = derivar([]);
+  const v = viabilidade(d.temas, [180, 180, 180, 180, 180, 180, 180], [ENAMED], "2027-01-01");
+  assert.ok(v.cabe, `deveria caber: precisa ${v.necessarios}, tem ${v.disponiveis}`);
+  assert.ok(v.folga > 0);
+});
+
+test("prazo curto com rotina magra não cabe, e diz o quanto falta", () => {
+  const d = derivar([]);
+  const perto = { prova: "x", nome: "X", data: "2026-09-01", perfil: "enamed" };
+  const v = viabilidade(d.temas, [0, 30, 30, 30, 30, 30, 0], [perto], "2026-08-01");
+  assert.equal(v.cabe, false);
+  assert.ok(v.semanaNecessaria > v.semanaAtual, "tem de apontar a semana necessária");
+});
+
+test("sem prova marcada não há viabilidade a calcular", () => {
+  assert.equal(viabilidade(derivar([]).temas, ROTINA_PADRAO, [], "2026-08-01"), null);
+});
+
+/* ---------- simulados ---------- */
+
+const evSimulado = (id, data, q, c, prova) => ({
+  id, tipo: "simulado", ts: `${data}T18:00:00.000Z`,
+  dados: { data, questoes: q, certas: c, minutos: 300, prova },
+});
+
+test("simulado entra na lista com o percentual calculado", () => {
+  const d = derivar([evSimulado("s1", "2026-06-01", 100, 62, "enamed")]);
+  assert.equal(d.simulados.length, 1);
+  assert.equal(d.simulados[0].a, 62);
+  assert.equal(d.simulados[0].prova, "enamed");
+});
+
+test("simulado anulado some, como um estudo anulado", () => {
+  const evs = [
+    evSimulado("s1", "2026-06-01", 100, 62, "enamed"),
+    { id: "an", tipo: "estudo-", ts: "2026-06-01T19:00:00.000Z", dados: { evento: "s1" } },
+  ];
+  assert.equal(derivar(evs).simulados.length, 0, "desfazer simulado precisa funcionar");
+});
+
+test("simulados saem ordenados por data", () => {
+  const d = derivar([
+    evSimulado("s2", "2026-08-01", 100, 70),
+    evSimulado("s1", "2026-06-01", 100, 55),
+  ]);
+  assert.deepEqual(d.simulados.map((s) => s.d), ["2026-06-01", "2026-08-01"]);
 });

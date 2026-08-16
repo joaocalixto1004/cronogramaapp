@@ -14,6 +14,7 @@ import {
   ultimo, desempenho, atraso, prioridade, pesoDe, questoesFeitas,
   provaAlvo, fase, intervaloAjustado, duracaoTipica, planoDoDia,
   derivar, eventosDoFormatoAntigo,
+  CATEGORIAS_ERRO, NOME_ERRO, notaProjetada, desempenhoPorArea, viabilidade,
 } from "./logica.js";
 
 const CHAVE_ANTIGA = "ritmo.v1";
@@ -34,6 +35,9 @@ let provaEditando = null;        // prova em correção no diálogo de provas
 const horas = (min) => {
   if (!min) return "0";
   const h = Math.floor(min / 60), m = min % 60;
+  // Acima de 10h os minutos viram ruído: "1626h26" não diz nada que "1.626h"
+  // não diga melhor.
+  if (h >= 10) return h.toLocaleString("pt-BR") + "h";
   return h && m ? `${h}h${String(m).padStart(2, "0")}` : h ? `${h}h` : `${m}min`;
 };
 
@@ -325,6 +329,99 @@ function renderPlano() {
   }));
 }
 
+/* ---------- painel de desempenho ---------- */
+function linhaArea(a) {
+  const el = document.createElement("div");
+  el.className = "linha-area";
+
+  const nome = document.createElement("span");
+  nome.className = "nome-area";
+  nome.textContent = a.area;
+
+  const barra = document.createElement("div");
+  barra.className = "barra";
+  const i = document.createElement("i");
+  // A barra mostra acerto, não cobertura: é o que decide realocar tempo.
+  i.style.width = (a.acerto ?? 0) + "%";
+  i.dataset.faixa = a.acerto === null ? "baixa" : a.acerto >= 80 ? "alta" : a.acerto >= 60 ? "media" : "baixa";
+  barra.append(i);
+
+  const val = document.createElement("span");
+  val.className = "val";
+  val.textContent = a.acerto === null ? "—" : a.acerto + "%";
+
+  const tend = document.createElement("span");
+  tend.className = "tend";
+  if (a.tendencia === null) tend.textContent = "";
+  else {
+    tend.dataset.sinal = a.tendencia > 2 ? "sobe" : a.tendencia < -2 ? "desce" : "igual";
+    tend.textContent = (a.tendencia > 0 ? "+" : "") + a.tendencia;
+  }
+
+  el.append(nome, barra, val, tend);
+  el.title = `${a.cobertos}/${a.total} temas cobertos · ${a.questoes} questões`;
+  return el;
+}
+
+function renderPainel() {
+  const perfil = alvo?.perfil ?? PERFIL_PADRAO;
+  const proj = notaProjetada(dados.temas, perfil);
+
+  $("projNota").textContent = proj.nota === null ? "—" : proj.nota + "%";
+  $("projRotulo").textContent = alvo ? `projetado · ${alvo.nome}` : "projetado";
+  $("projCobertura").textContent = `${proj.cobertura}% do edital coberto`;
+
+  $("areas").replaceChildren(
+    ...desempenhoPorArea(dados.temas, hoje())
+      .sort((x, y) => (x.acerto ?? 0) - (y.acerto ?? 0))   // o pior primeiro
+      .map(linhaArea));
+
+  // Carga: cabe no tempo que sobra?
+  const v = viabilidade(dados.temas, dados.rotina, dados.provas, hoje());
+  const carga = $("carga");
+  if (!v) {
+    carga.textContent = "";
+    carga.dataset.aperta = "0";
+  } else if (v.cabe) {
+    carga.dataset.aperta = "0";
+    carga.textContent =
+      `A rotina cabe: ${horas(v.necessarios)} de estudo estimados para ` +
+      `${horas(v.disponiveis)} disponíveis até a prova.`;
+  } else {
+    carga.dataset.aperta = "1";
+    carga.textContent =
+      `A rotina não cobre o edital a tempo: faltam ${horas(-v.folga)}. ` +
+      `Seriam ${horas(v.semanaNecessaria)} por semana em vez de ${horas(v.semanaAtual)} — ` +
+      `ou menos temas.`;
+  }
+
+  // Caderno de erros: o que domina.
+  const soma = {};
+  for (const t of dados.temas) {
+    for (const h of t.historico) {
+      if (!h.erros) continue;
+      for (const [k, n] of Object.entries(h.erros)) soma[k] = (soma[k] ?? 0) + n;
+    }
+  }
+  const total = Object.values(soma).reduce((s, n) => s + n, 0);
+  const res = $("errosResumo");
+  if (!total) {
+    res.textContent = "";
+  } else {
+    const pior = Object.entries(soma).sort((a, b) => b[1] - a[1])[0];
+    res.replaceChildren(
+      document.createTextNode(
+        CATEGORIAS_ERRO.filter((c) => soma[c]).map((c) => `${soma[c]} por ${NOME_ERRO[c]}`).join(" · ") + " — "),
+      Object.assign(document.createElement("b"), { textContent: NOME_ERRO[pior[0]] }),
+      document.createTextNode(" é o que mais te custa."));
+  }
+
+  const s = dados.simulados.at(-1);
+  $("ultimoSimulado").textContent = s
+    ? `último simulado ${fmt(s.d)}: ${s.a}%${s.q ? ` em ${s.q} questões` : ""}`
+    : "";
+}
+
 /* ---------- render ---------- */
 function render() {
   alvo = provaAlvo(dados.provas, hoje());
@@ -353,6 +450,7 @@ function render() {
   $("stQst").textContent = qst;   // a sequência migrou para o rodapé do plano
 
   renderPlano();
+  renderPainel();
   renderLista(ts);
 }
 
@@ -441,6 +539,8 @@ function abrirRegistro(id) {
   $("regData").value = hoje();
   $("regQuestoes").value = "";
   $("regCertas").value = "";
+  for (const c of CATEGORIAS_ERRO) campoErro(c).value = "";
+  $("regNota").value = "";
   $("regMinutos").value = duracaoTipica(t);
   rangeAc.value = desempenho(t) ?? 70;
   atualizaHint();
@@ -454,14 +554,34 @@ function percentualDoFormulario() {
   return null;
 }
 
+const campoErro = (cat) => $("err" + cat[0].toUpperCase() + cat.slice(1));
+const lerErros = () => {
+  const e = {};
+  let total = 0;
+  for (const c of CATEGORIAS_ERRO) {
+    const v = parseInt(campoErro(c).value, 10);
+    if (Number.isFinite(v) && v > 0) { e[c] = v; total += v; }
+  }
+  return { erros: total ? e : null, total };
+};
+
 function atualizaHint() {
   const q = lerInteiro("regQuestoes");
+  const c = lerInteiro("regCertas");
   const pct = percentualDoFormulario();
 
   // O controle de domínio só aparece quando não há contagem de questões.
   $("regSemQuestoes").hidden = !!q;
   $("regPct").textContent = pct === null ? "—" : pct + "%";
   $("regOut").textContent = rangeAc.value + "%";
+
+  // O caderno de erros só faz sentido quando houve erro.
+  const errados = q && c !== null ? Math.max(0, q - c) : 0;
+  $("regErros").hidden = !errados;
+  if (errados) {
+    $("regErrosTitulo").textContent =
+      `Onde ${errados === 1 ? "o erro foi" : `os ${errados} erros foram`}`;
+  }
 
   const v = pct ?? +rangeAc.value;
   const t = dados.temas.find((x) => x.id === alvoId);
@@ -507,10 +627,19 @@ dlgReg.addEventListener("close", () => {
     return;
   }
 
+  const { erros, total } = lerErros();
+  if (q && c !== null && total > q - c) {
+    avisar(`Você marcou ${total} erros para ${q - c} questões erradas.`);
+    return;
+  }
+
   const registro = { tema: t.id, data };
   if (minutos) registro.minutos = minutos;
   if (q && c !== null) { registro.questoes = q; registro.certas = c; }
   else registro.acertos = +rangeAc.value;
+  if (erros) registro.erros = erros;
+  const nota = $("regNota").value.trim();
+  if (nota) registro.nota = nota;
 
   const ev = registrarEvento("estudo", registro);
   const atualizado = dados.temas.find((x) => x.id === t.id);
@@ -643,6 +772,55 @@ dlgProvas.addEventListener("close", () => {
   } else {
     avisar(`${nome} em ${fmt(data)}.`);
   }
+});
+
+/* ---------- diálogo: simulado ---------- */
+const dlgSimulado = $("dlgSimulado");
+
+function atualizaSimulado() {
+  const q = lerInteiro("smQuestoes"), c = lerInteiro("smCertas");
+  const pct = q && c !== null ? Math.round((Math.min(c, q) / q) * 100) : null;
+  $("smPct").textContent = pct === null ? "—" : pct + "%";
+
+  const proj = notaProjetada(dados.temas, alvo?.perfil ?? PERFIL_PADRAO).nota;
+  $("smHint").textContent = pct === null
+    ? "Simulado cronometrado mede ritmo, não só conteúdo."
+    : proj === null ? `${pct}% no simulado.`
+    : pct >= proj ? `${pct}% — acima dos ${proj}% que o histórico projetava.`
+    : `${pct}% — abaixo dos ${proj}% projetados. O simulado é o dado mais confiável dos dois.`;
+}
+for (const id of ["smQuestoes", "smCertas"]) $(id).addEventListener("input", atualizaSimulado);
+
+$("btnSimulado").addEventListener("click", () => {
+  const opcoes = dados.provas.map((p) => new Option(p.nome, p.prova));
+  $("smProva").replaceChildren(...(opcoes.length ? opcoes : [new Option("sem prova cadastrada", "")]));
+  if (alvo) $("smProva").value = alvo.prova;
+  $("smData").value = hoje();
+  $("smQuestoes").value = "";
+  $("smCertas").value = "";
+  $("smMinutos").value = "";
+  atualizaSimulado();
+  dlgSimulado.showModal();
+});
+
+dlgSimulado.addEventListener("close", () => {
+  if (dlgSimulado.returnValue !== "ok") return;
+  const q = lerInteiro("smQuestoes"), c = lerInteiro("smCertas");
+  const minutos = lerInteiro("smMinutos");
+  if (!q || c === null) { avisar("Informe quantas questões você fez e quantas acertou."); return; }
+  if (c > q) { avisar("Não dá para acertar mais questões do que você fez."); return; }
+
+  const registro = { data: $("smData").value || hoje(), questoes: q, certas: c };
+  if (minutos) registro.minutos = minutos;
+  const prova = $("smProva").value;
+  if (prova) registro.prova = prova;
+
+  const ev = registrarEvento("simulado", registro);
+  const pct = Math.round((c / q) * 100);
+  avisar(`Simulado registrado: ${pct}% em ${q} questões.`, {
+    rotulo: "desfazer",
+    aoClicar: () => registrarEvento("estudo-", { evento: ev.id }),
+  });
 });
 
 /* ---------- diálogo: rotina ---------- */

@@ -20,6 +20,7 @@
   <div class="brandrow">
     <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow">cronograma de residência</span></h1>
     <div class="topo-acoes">
+      <button class="ghost" id="btnSimulado">simulado</button>
       <button class="ghost" id="btnRotina">rotina</button>
       <button class="ghost" id="btnProvas">provas</button>
     </div>
@@ -54,6 +55,20 @@
   <div class="stat"><span class="eyebrow">acertos médios</span><b id="stAce">—</b></div>
   <div class="stat"><span class="eyebrow">questões</span><b id="stQst">0</b></div>
 </section>
+
+<details class="painel" id="painel">
+  <summary class="painel-topo">
+    <span class="eyebrow">desempenho</span>
+    <span class="projecao"><b id="projNota">—</b><span class="mono" id="projRotulo">projetado</span></span>
+    <span class="mono" id="projCobertura"></span>
+  </summary>
+  <div class="painel-corpo">
+    <p class="carga" id="carga"></p>
+    <div id="areas" class="areas"></div>
+    <p class="erros-resumo mono" id="errosResumo"></p>
+    <p class="ultimo-simulado mono" id="ultimoSimulado"></p>
+  </div>
+</details>
 
 <div class="bar">
   <button class="chip" data-filtro="todos" aria-pressed="true">todos</button>
@@ -99,6 +114,21 @@
       <input type="range" id="regAcertos" min="0" max="100" step="5" value="70">
       <output id="regOut" class="mono">70%</output>
     </div>
+  </div>
+
+  <!-- Só aparece quando houve erro. A categoria é o que importa: erro por
+       desatenção não se conserta estudando o tema outra vez. -->
+  <div id="regErros" hidden>
+    <label id="regErrosTitulo">Onde os erros foram</label>
+    <div class="cats">
+      <label class="cat"><span>conhecimento</span>
+        <input type="number" id="errConhecimento" min="0" max="2000" step="1" placeholder="0" inputmode="numeric"></label>
+      <label class="cat"><span>interpretação</span>
+        <input type="number" id="errInterpretacao" min="0" max="2000" step="1" placeholder="0" inputmode="numeric"></label>
+      <label class="cat"><span>desatenção</span>
+        <input type="number" id="errDesatencao" min="0" max="2000" step="1" placeholder="0" inputmode="numeric"></label>
+    </div>
+    <input type="text" id="regNota" maxlength="200" placeholder="o que confundiu — opcional">
   </div>
 
   <label for="regMinutos">Minutos de estudo</label>
@@ -157,6 +187,31 @@
   <div class="acoes">
     <button class="btn sec" value="cancel" type="submit" formnovalidate>fechar</button>
     <button class="btn" value="ok" type="submit" id="btnSalvarProva">salvar prova</button>
+  </div>
+</form></dialog>
+
+<!-- simulado -->
+<dialog id="dlgSimulado"><form method="dialog" class="dlg">
+  <span class="eyebrow">simulado</span>
+  <h3>Registrar simulado</h3>
+  <p class="sub">Prova inteira, cronometrada. É o que treina ritmo — e o que calibra
+    a nota projetada contra a realidade.</p>
+  <label for="smData">Data</label>
+  <input type="date" id="smData">
+  <label for="smProva">Para qual prova</label>
+  <select id="smProva"></select>
+  <label for="smQuestoes">Questões — feitas e certas</label>
+  <div class="dupla">
+    <input type="number" id="smQuestoes" min="1" max="2000" step="1" placeholder="feitas" inputmode="numeric">
+    <input type="number" id="smCertas" min="0" max="2000" step="1" placeholder="certas" inputmode="numeric">
+    <output id="smPct" class="mono">—</output>
+  </div>
+  <label for="smMinutos">Minutos gastos</label>
+  <input type="number" id="smMinutos" min="0" max="960" step="5" placeholder="300" inputmode="numeric">
+  <div class="hint" id="smHint"></div>
+  <div class="acoes">
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
+    <button class="btn" value="ok" type="submit" id="smOk">salvar</button>
   </div>
 </form></dialog>
 
