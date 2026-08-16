@@ -21,6 +21,11 @@ pag.on("dialog", async (d) => { await d.accept(); });   // confirm de remoção
 
 await pag.addInitScript(() => localStorage.clear());
 await pag.goto(B, { waitUntil: "networkidle" });
+// As áreas nascem fechadas: 97 temas abertos davam 13.000px de rolagem.
+// Para mexer nas linhas, abre todas.
+const abrirAreas = () => pag.evaluate(() =>
+  document.querySelectorAll("#lista details").forEach((d) => { d.open = true; }));
+await abrirAreas();
 
 /* ---------- 1. reaproveitamento de nós ---------- */
 console.log("\n1. Reaproveitamento de nós");
@@ -77,6 +82,7 @@ const pendentes = await contar();
 
 await pag.locator('[data-filtro="todos"]').click();
 await pag.waitForTimeout(200);
+await abrirAreas();
 const todos = await contar();
 todos === N ? ok(`voltar para "todos" restaura as ${N} linhas`) : erro(`"todos" mostrou ${todos}, esperava ${N}`);
 
@@ -114,7 +120,11 @@ imgs === 0 ? ok("nenhum elemento injetado no DOM") : erro(`${imgs} <img> injetad
 /* ---------- 5. remoção ---------- */
 console.log("\n5. Remoção");
 const antesRem = await contar();
-await pag.locator("#lista .row").first().locator("button.del").click();
+// Remover saiu da linha e passou a morar no diálogo de registro.
+await pag.locator("#lista .row").first().locator("button.reg").click();
+await pag.locator("#dlgReg").waitFor({ state: "visible" });
+await pag.locator("#regRemover").click();
+await pag.locator("#dlgReg").waitFor({ state: "hidden" });
 await pag.waitForTimeout(400);
 const depoisRem = await contar();
 depoisRem === antesRem - 1 ? ok("remover tira exatamente uma linha") : erro(`${antesRem} -> ${depoisRem}`);

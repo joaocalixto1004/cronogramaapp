@@ -14,6 +14,11 @@ const problemas=[]; pag.on("pageerror",e=>problemas.push(e.message));
 
 await pag.addInitScript(()=>localStorage.clear());
 await pag.goto(B,{waitUntil:"networkidle"});
+// As áreas nascem fechadas: 97 temas abertos davam 13.000px de rolagem.
+// Para mexer nas linhas, abre todas.
+const abrirAreas = () => pag.evaluate(() =>
+  document.querySelectorAll("#lista details").forEach((d) => { d.open = true; }));
+await abrirAreas();
 const cont = ()=>pag.locator("#lista .row").count();
 const cob  = ()=>pag.locator("#stCob").textContent();
 
@@ -36,7 +41,10 @@ await pag.waitForTimeout(400);
 console.log("\n2. Remover e desfazer");
 const antes = await cont();
 const nomeAlvo = await pag.locator("#lista .row").first().locator(".nome").textContent();
-await pag.locator("#lista .row").first().locator("button.del").click();
+await pag.locator("#lista .row").first().locator("button.reg").click();
+await pag.locator("#dlgReg").waitFor({state:"visible"});
+await pag.locator("#regRemover").click();
+await pag.locator("#dlgReg").waitFor({state:"hidden"});
 await pag.waitForTimeout(300);
 (await cont()) === antes-1 ? ok("removeu sem pedir confirmação") : erro(`linhas: ${antes} -> ${await cont()}`);
 

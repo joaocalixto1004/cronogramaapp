@@ -98,15 +98,25 @@ MOLDE_LINHA.innerHTML =
   `<div class="row"><div class="main">` +
   `<div class="tema"><i class="peso"></i><span class="nome"></span></div>` +
   `<div class="meta"></div></div>` +
-  `<div class="right"><span class="traco"></span>` +
-  `<button class="reg">registrar</button>` +
-  `<button class="del" title="remover tema">×</button></div></div>`;
+  `<span class="traco"></span>` +
+  `<button class="reg">registrar</button></div>`;
 
+// <details>: 97 temas abertos de uma vez davam 13.000px de rolagem no celular.
 const MOLDE_AREA = document.createElement("template");
 MOLDE_AREA.innerHTML =
-  `<section class="areablock"><div class="areahead">` +
-  `<h3></h3><div class="bar-prog"><i></i></div><span class="eyebrow"></span>` +
-  `</div></section>`;
+  `<details class="areablock"><summary class="areahead">` +
+  `<h3></h3><div class="bar-prog"><i></i></div><span class="resumo"></span>` +
+  `</summary></details>`;
+
+/* Quais áreas ficam abertas é preferência de tela, não dado de estudo: mora
+   no localStorage e não no log de eventos. */
+const CHAVE_AREAS = "ritmo.areas.v1";
+let areasAbertas = new Set();
+try { areasAbertas = new Set(JSON.parse(localStorage.getItem(CHAVE_AREAS) ?? "[]")); }
+catch { /* preferência ilegível: começa tudo fechado */ }
+function guardarAreas() {
+  try { localStorage.setItem(CHAVE_AREAS, JSON.stringify([...areasAbertas])); } catch { /* sem espaço */ }
+}
 
 const linhas = new Map();
 const blocos = new Map();
@@ -118,17 +128,13 @@ const assinaturaTraco = (t, hj) =>
 
 function criarLinha(id) {
   const el = MOLDE_LINHA.content.firstElementChild.cloneNode(true);
-  const reg = el.querySelector(".reg");
-  const del = el.querySelector(".del");
-  reg.dataset.reg = id;
-  del.dataset.del = id;
+  el.querySelector(".reg").dataset.reg = id;
   return {
     el,
     peso: el.querySelector(".peso"),
     nome: el.querySelector(".nome"),
     meta: el.querySelector(".meta"),
     traco: el.querySelector(".traco"),
-    del,
     assin: null,
     assinTraco: null,
   };
@@ -154,7 +160,6 @@ function atualizarLinha(l, t, hj, perfil) {
   l.peso.className = `peso p${peso}`;
   l.peso.title = `incidência ${peso}/3`;
   l.nome.textContent = t.nome;
-  l.del.setAttribute("aria-label", `Remover ${t.nome}`);
 
   l.meta.replaceChildren(...pedacosMeta(t).map(([classe, texto]) => {
     const s = document.createElement("span");
@@ -191,15 +196,31 @@ function renderLista(ts) {
     if (!bloco) {
       const el = MOLDE_AREA.content.firstElementChild.cloneNode(true);
       el.querySelector("h3").textContent = area;
-      bloco = { el, barra: el.querySelector(".bar-prog i"), pct: el.querySelector(".eyebrow") };
+      el.addEventListener("toggle", () => {
+        // Abertura forçada por filtro é temporária, não vira preferência.
+        if (filtro !== "todos") return;
+        if (el.open) areasAbertas.add(area); else areasAbertas.delete(area);
+        guardarAreas();
+      });
+      bloco = { el, barra: el.querySelector(".bar-prog i"), resumo: el.querySelector(".resumo") };
       blocos.set(area, bloco);
     }
 
     const todos = ts.filter((t) => t.area === area);
-    const pct = todos.length ? Math.round((todos.filter((t) => t.historico.length).length / todos.length) * 100) : 0;
+    const cobertos = todos.filter((t) => t.historico.length).length;
+    const atrasadas = todos.filter((t) => { const a = atraso(t, hj); return a !== null && a > 0; }).length;
+    const pct = todos.length ? Math.round((cobertos / todos.length) * 100) : 0;
+
     // Largura pelo CSSOM: a CSP estrita bloqueia style="" no markup, não isto.
     bloco.barra.style.width = pct + "%";
-    bloco.pct.textContent = pct + "%";
+    // Fechada, a área precisa dizer sozinha se merece atenção.
+    bloco.resumo.className = "resumo" + (atrasadas ? " atrasadas" : "");
+    bloco.resumo.textContent = atrasadas
+      ? `${atrasadas} atrasada${atrasadas > 1 ? "s" : ""}`
+      : `${cobertos}/${todos.length}`;
+
+    // Filtrar é pedir para ver o resultado: abre as áreas que sobraram.
+    bloco.el.open = filtro !== "todos" || areasAbertas.has(area);
 
     let ancora = bloco.el.firstElementChild;
     for (const t of doGrupo) {
@@ -251,6 +272,13 @@ function renderPlano() {
   chip.hidden = false;
   chip.dataset.fase = p.fase;
   chip.textContent = NOME_FASE[p.fase];
+
+  // Só a sequência: "N temas na fila" contava todo tema não estudado hoje,
+  // ou seja, quase o catálogo inteiro — número grande e sem significado.
+  const seq = sequencia();
+  $("hojeRodape").textContent = seq
+    ? `${seq} dia${seq > 1 ? "s" : ""} seguido${seq > 1 ? "s" : ""} de estudo`
+    : "";
 
   $("tituloFila").textContent =
     !p.minutosDisponiveis ? "Hoje é dia de descanso"
@@ -322,8 +350,7 @@ function render() {
   $("stCob").textContent = cob + "/" + ts.length;
   $("stAtr").textContent = atr;
   $("stAce").textContent = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) + "%" : "—";
-  $("stQst").textContent = qst;
-  $("stSeq").textContent = sequencia() + "d";
+  $("stQst").textContent = qst;   // a sequência migrou para o rodapé do plano
 
   renderPlano();
   renderLista(ts);
@@ -378,18 +405,6 @@ function registrarEvento(tipo, dadosEv) {
 document.addEventListener("click", (e) => {
   const reg = e.target.closest("[data-reg]");
   if (reg) { abrirRegistro(reg.dataset.reg); return; }
-
-  const del = e.target.closest("[data-del]");
-  if (del) {
-    const t = dados.temas.find((x) => x.id === del.dataset.del);
-    if (!t) return;
-    registrarEvento("tema-", { tema: t.id });
-    avisar(`“${t.nome}” saiu do cronograma.`, {
-      rotulo: "desfazer",
-      aoClicar: () => registrarEvento("tema+", { tema: t.id, nome: t.nome, area: t.area, pesos: t.pesos }),
-    });
-    return;
-  }
 
   const editProva = e.target.closest("[data-prova-edit]");
   if (editProva) { editarProva(editProva.dataset.provaEdit); return; }
@@ -464,6 +479,18 @@ function atualizaHint() {
 
 for (const id of ["regQuestoes", "regCertas", "regData"]) $(id).addEventListener("input", atualizaHint);
 rangeAc.addEventListener("input", atualizaHint);
+
+// Remover mora aqui, não numa coluna repetida em cada uma das 97 linhas.
+$("regRemover").addEventListener("click", () => {
+  const t = dados.temas.find((x) => x.id === alvoId);
+  if (!t) return;
+  dlgReg.close("cancel");
+  registrarEvento("tema-", { tema: t.id });
+  avisar(`“${t.nome}” saiu do cronograma.`, {
+    rotulo: "desfazer",
+    aoClicar: () => registrarEvento("tema+", { tema: t.id, nome: t.nome, area: t.area, pesos: t.pesos }),
+  });
+});
 
 dlgReg.addEventListener("close", () => {
   if (dlgReg.returnValue !== "ok") return;

@@ -35,6 +35,13 @@ csp.length ? erro("violações de CSP: " + csp.join(" | ")) : ok("nenhuma viola�
 externos.length ? erro("requisições a terceiros: " + externos.join(", ")) : ok("nenhuma requisição externa (fontes são locais)");
 problemas.length ? erro("erros no console: " + problemas.join(" | ")) : ok("console limpo");
 
+
+// As áreas nascem fechadas: 97 temas abertos davam 13.000px de rolagem.
+// Para mexer nas linhas, abre todas.
+const abrirAreas = () => pag.evaluate(() =>
+  document.querySelectorAll("#lista details").forEach((d) => { d.open = true; }));
+await abrirAreas();
+
 console.log("\n2. Render");
 const temas = await pag.locator(".row").count();
 temas === N ? ok(`${N} temas renderizados`) : erro(`esperava ${N} temas, veio ${temas}`);

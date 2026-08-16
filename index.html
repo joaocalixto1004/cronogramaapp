@@ -35,14 +35,7 @@
   </div>
 </header>
 
-<section class="stats" aria-label="Situação geral">
-  <div class="stat"><span class="eyebrow">temas cobertos</span><b id="stCob">0</b></div>
-  <div class="stat"><span class="eyebrow">revisões atrasadas</span><b id="stAtr">0</b></div>
-  <div class="stat"><span class="eyebrow">acertos médios</span><b id="stAce">—</b></div>
-  <div class="stat"><span class="eyebrow">questões</span><b id="stQst">0</b></div>
-  <div class="stat"><span class="eyebrow">sequência</span><b id="stSeq">0</b></div>
-</section>
-
+<!-- O plano do dia é o produto: vem antes de qualquer métrica. -->
 <section class="today">
   <div class="hoje-topo">
     <span class="eyebrow">plano de hoje</span>
@@ -51,6 +44,15 @@
   <h2 id="tituloFila">O que estudar agora</h2>
   <div class="barra-dia" aria-hidden="true"><i id="barraDia"></i></div>
   <ul class="queue" id="fila"></ul>
+  <p class="hoje-rodape mono" id="hojeRodape"></p>
+</section>
+
+<!-- Quatro, não cinco: com cinco sobrava uma célula vazia no celular. -->
+<section class="stats" aria-label="Situação geral">
+  <div class="stat"><span class="eyebrow">temas cobertos</span><b id="stCob">0</b></div>
+  <div class="stat"><span class="eyebrow">atrasadas</span><b id="stAtr">0</b></div>
+  <div class="stat"><span class="eyebrow">acertos médios</span><b id="stAce">—</b></div>
+  <div class="stat"><span class="eyebrow">questões</span><b id="stQst">0</b></div>
 </section>
 
 <div class="bar">
@@ -104,6 +106,10 @@
 
   <div class="hint" id="regHint"></div>
   <div class="acoes">
+    <!-- Remover é raro e destrutivo: mora aqui, não numa coluna repetida
+         97 vezes na lista. -->
+    <button class="perigo" type="button" id="regRemover">remover tema</button>
+    <span class="spacer"></span>
     <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
     <button class="btn" value="ok" type="submit" id="regOk">salvar</button>
   </div>

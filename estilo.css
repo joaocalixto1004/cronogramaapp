@@ -40,11 +40,10 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+/* O quadriculado atravessava o texto da página inteira. Agora ele existe só
+   como fundo do cabeçalho, onde é identidade em vez de ruído. */
 body{
   background:var(--paper);
-  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);
-  background-size:100% 40px,40px 100%;
-  background-position:-1px -1px;
   color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,sans-serif;
   font-size:15px;line-height:1.5;
@@ -56,10 +55,18 @@ h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-w
 button{font:inherit;color:inherit;cursor:pointer}
 :focus-visible{outline:2px solid var(--azul);outline-offset:2px}
 
-.wrap{max-width:1120px;margin:0 auto;padding:0 var(--pad) 80px}
+/* 1120px deixava a linha do tema com um vão de ~700px entre o nome e os
+   controles. 940 mantém tudo num só golpe de vista. */
+.wrap{max-width:940px;margin:0 auto;padding:0 var(--pad) 80px}
 
 /* ---------- cabeçalho / contagem ---------- */
-header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16px}
+header{
+  border-bottom:1.5px solid var(--ink);margin-bottom:22px;padding:22px 0 18px;
+  background-image:linear-gradient(rgba(123,142,151,.22) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(123,142,151,.22) 1px,transparent 1px);
+  background-size:100% 40px,40px 100%;
+  background-position:-1px -1px;
+}
 .brandrow{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .brand{font-size:19px;letter-spacing:-.01em}
 .brand span{color:var(--azul)}
@@ -80,10 +87,14 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .fase[data-fase="aprofundamento"]{border-color:var(--ambar);color:var(--ambar)}
 .fase[data-fase="cobertura"]{border-color:var(--azul);color:var(--azul)}
 
-/* ---------- métricas ---------- */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:30px}
-.stat{background:var(--paper-2);padding:12px 14px}
-.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:24px;font-weight:600;line-height:1.2;margin-top:3px}
+/* ---------- métricas ----------
+   Referência, não protagonista: vêm depois do plano do dia e em corpo menor. */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);
+  overflow:hidden;margin-bottom:26px}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--paper-2);padding:10px 12px}
+.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:19px;font-weight:600;line-height:1.2;margin-top:2px}
 
 /* ---------- fila de hoje ---------- */
 .today{background:var(--ink);color:var(--paper-2);border-radius:var(--r);padding:18px var(--pad);margin-bottom:32px}
@@ -91,6 +102,8 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .today .eyebrow{color:#8FAEB9}
 .hoje-topo{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .hoje-topo .mono{font-size:12px;color:#8FAEB9}
+.hoje-rodape{margin:12px 0 0;font-size:11px;color:#8FAEB9;letter-spacing:.04em}
+.hoje-rodape:empty{display:none}
 .barra-dia{height:4px;background:#24404C;border-radius:2px;margin-top:12px;overflow:hidden}
 .barra-dia i{display:block;height:100%;width:0;background:#2E93B8;border-radius:2px}
 .queue .min{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#8FAEB9;white-space:nowrap}
@@ -115,13 +128,35 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper-2)}
 .bar .spacer{flex:1}
 
-/* ---------- tabela de temas ---------- */
-.areablock{margin-bottom:26px}
-.areahead{display:flex;align-items:center;gap:12px;padding:0 0 7px;border-bottom:1.5px solid var(--ink)}
-.areahead h3{font-size:14px;letter-spacing:.02em;text-transform:uppercase}
-.areahead .bar-prog{flex:1;height:5px;background:var(--paper-2);border:1px solid var(--rule);position:relative;max-width:220px}
+/* ---------- lista de temas ----------
+   São 97. Abertas de uma vez davam 13.000px de rolagem no celular, então cada
+   área é um <details> que resume o próprio conteúdo fechado. */
+.areablock{border:1px solid var(--rule);border-radius:var(--r);background:#fff;margin-bottom:8px;overflow:hidden}
+.areahead{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;
+  list-style:none;background:var(--paper-2)}
+.areahead::-webkit-details-marker{display:none}
+.areahead::after{content:"";width:6px;height:6px;flex:none;margin-left:auto;
+  border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);
+  transform:rotate(-45deg);transition:transform .15s ease}
+.areablock[open] > .areahead{border-bottom:1px solid var(--rule)}
+.areablock[open] > .areahead::after{transform:rotate(45deg)}
+.areahead:hover{background:var(--azul-claro)}
+.areahead h3{font-size:13.5px;letter-spacing:.02em;text-transform:uppercase;min-width:0}
+.areahead .bar-prog{flex:1;height:4px;background:var(--paper);border:1px solid var(--rule);position:relative;max-width:160px;min-width:40px}
+/* Em tela estreita "Medicina de Família e Comunidade" espremia a barra até
+   sumir. O número já diz o mesmo, então some a barra e não o nome. */
+@media(max-width:620px){
+  .areahead .bar-prog{display:none}
+  .areahead h3{white-space:normal}
+}
 .areahead .bar-prog i{position:absolute;inset:0 auto 0 0;background:var(--verde);display:block;width:0}
-.row{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--rule)}
+.areahead .resumo{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);white-space:nowrap;margin-left:auto}
+.areahead::after{margin-left:10px}
+.areahead .atrasadas{color:var(--vermelho)}
+
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px 14px;align-items:center;
+  padding:10px 14px;border-bottom:1px solid var(--rule)}
+.row:last-child{border-bottom:0}
 .row:hover{background:var(--paper-2)}
 .row .main{min-width:0}
 .row .tema{font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:8px}
@@ -132,9 +167,15 @@ header{border-bottom:1.5px solid var(--ink);margin-bottom:26px;padding:22px 0 16
 .meta .due{color:var(--vermelho);font-weight:500}
 .meta .ok{color:var(--verde)}
 .right{display:flex;align-items:center;gap:10px}
-.trace{flex:none}
-.reg{background:var(--paper-2);border:1px solid var(--ink);border-radius:var(--r);padding:5px 11px;font-size:12px;font-family:"IBM Plex Mono",monospace}
-.reg:hover{background:var(--ink);color:var(--paper-2)}
+.trace{flex:none;opacity:.85}
+/* 97 botões emoldurados viravam uma parede de caixas. Texto discreto que
+   ganha moldura só quando a linha recebe o ponteiro ou o foco. */
+.reg{background:none;border:1px solid transparent;border-radius:var(--r);
+  padding:5px 10px;font-size:12px;font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
+.row:hover .reg,.reg:focus-visible{border-color:var(--rule);background:#fff;color:var(--ink)}
+.reg:hover{border-color:var(--ink)!important;background:var(--ink)!important;color:var(--paper-2)!important}
+@media(hover:none){.reg{border-color:var(--rule);background:#fff}}
+
 .del{background:none;border:0;color:var(--ink-3);font-size:15px;line-height:1;padding:4px 2px}
 .del:hover{color:var(--vermelho)}
 .semfiltro{color:var(--ink-3);font-size:14px}
@@ -196,7 +237,11 @@ input[type=range]{padding:0}
 .acertos{display:flex;align-items:center;gap:12px}
 .acertos output{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;min-width:60px}
 .hint{font-size:12px;color:var(--ink-2);background:var(--azul-claro);border-left:2px solid var(--azul);padding:8px 10px;margin-top:12px}
-.acoes{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.acoes{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:20px}
+.acoes .spacer{flex:1}
+.perigo{background:none;border:0;padding:5px 0;font-size:12.5px;
+  font-family:"IBM Plex Mono",monospace;color:var(--ink-3);text-decoration:underline;text-underline-offset:3px}
+.perigo:hover{color:var(--vermelho)}
 .btn{background:var(--ink);color:var(--paper-2);border:1.5px solid var(--ink);border-radius:var(--r);padding:8px 16px;font-size:14px}
 .btn:hover{background:var(--azul);border-color:var(--azul)}
 .btn.sec{background:none;color:var(--ink)}
