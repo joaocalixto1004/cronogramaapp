@@ -13,6 +13,7 @@ import {
   derivar, eventosDoFormatoAntigo,
   intervaloAjustado, planoDoDia, provaAlvo, fase, pesoDe, prioridade, normalizarRegistro,
   notaProjetada, desempenhoPorArea, viabilidade, ACERTO_AO_ACASO,
+  ITENS_CURRICULO, TETO_CURRICULO, pontosCurriculo, potencialCurriculo, semestresRestantes,
   ROTINA_PADRAO, BLOCO_PADRAO,
 } from "../logica.js";
 
@@ -725,4 +726,104 @@ test("simulados saem ordenados por data", () => {
     evSimulado("s1", "2026-06-01", 100, 55),
   ]);
   assert.deepEqual(d.simulados.map((s) => s.d), ["2026-06-01", "2026-08-01"]);
+});
+
+/* ---------- currículo ---------- */
+
+const evCurriculo = (alinea, quantidade, ts = "2026-08-01T10:00:00.000Z") =>
+  ({ id: `c:${alinea}:${ts}`, tipo: "curriculo", ts, dados: { alinea, quantidade } });
+
+test("os tetos explícitos do edital somam exatamente 10", () => {
+  // Se isto quebrar, a leitura do quadro de atribuição saiu do edital.
+  const soma = ITENS_CURRICULO
+    .filter((i) => i.teto !== null && !i.tetoCom)
+    .reduce((s, i) => s + i.teto, 0);
+  assert.equal(soma, TETO_CURRICULO);
+});
+
+test("cada alínea respeita o próprio teto", () => {
+  // 10 semestres de monitoria não valem 5 pontos: valem 1.
+  const p = pontosCurriculo({ A: { quantidade: 10 } });
+  assert.equal(p.porAlinea.A, 1.0);
+  assert.equal(p.total, 1.0);
+});
+
+test("G e H dividem o mesmo teto, com o indexado entrando primeiro", () => {
+  const p = pontosCurriculo({ G: { quantidade: 2 }, H: { quantidade: 5 } });
+  assert.equal(p.porAlinea.G, 1.0, "dois artigos indexados já fecham o teto");
+  assert.equal(p.porAlinea.H, 0, "não sobra espaço para o não indexado");
+
+  const q = pontosCurriculo({ G: { quantidade: 1 }, H: { quantidade: 5 } });
+  assert.equal(q.porAlinea.G, 0.5);
+  assert.equal(q.porAlinea.H, 0.5, "o não indexado ocupa o que sobrou");
+});
+
+test("o total nunca passa de 10", () => {
+  const tudo = {};
+  for (const i of ITENS_CURRICULO) tudo[i.alinea] = { quantidade: 50 };
+  const p = pontosCurriculo(tudo);
+  assert.equal(p.total, TETO_CURRICULO);
+  assert.ok(p.perdidoPorTeto > 0, "e informa o que passou do limite");
+});
+
+test("currículo vazio vale zero, sem quebrar", () => {
+  assert.equal(pontosCurriculo().total, 0);
+  assert.equal(pontosCurriculo({}).total, 0);
+});
+
+test("curriculo é a última palavra por alínea", () => {
+  const d = derivar([
+    evCurriculo("A", 1, "2026-08-01T10:00:00.000Z"),
+    evCurriculo("A", 3, "2026-09-01T10:00:00.000Z"),
+  ]);
+  assert.equal(d.curriculo.A.quantidade, 3);
+  assert.equal(pontosCurriculo(d.curriculo).porAlinea.A, 1.0);
+});
+
+test("zerar a quantidade remove a alínea", () => {
+  const d = derivar([
+    evCurriculo("K", 1, "2026-08-01T10:00:00.000Z"),
+    evCurriculo("K", 0, "2026-09-01T10:00:00.000Z"),
+  ]);
+  assert.equal(d.curriculo.K, undefined);
+});
+
+test("alínea inventada é ignorada", () => {
+  const d = derivar([{ id: "x", tipo: "curriculo", ts: "2026-08-01T10:00:00.000Z", dados: { alinea: "Z", quantidade: 9 } }]);
+  assert.deepEqual(d.curriculo, {});
+});
+
+/* ---------- a janela dos itens semestrais ---------- */
+
+test("semestres restantes saem da distância até a prova", () => {
+  assert.equal(semestresRestantes([SESDF], "2026-08-16"), 4);   // ~29 meses
+  assert.equal(semestresRestantes([{ prova: "x", nome: "X", data: "2026-10-01" }], "2026-08-16"), 0);
+  assert.equal(semestresRestantes([], "2026-08-16"), null);
+});
+
+test("com tempo de sobra, tudo ainda é alcançável", () => {
+  const p = potencialCurriculo({}, [SESDF], "2026-08-16");
+  assert.equal(p.total, 0);
+  assert.equal(p.alcancavel, TETO_CURRICULO, "faltando 4 semestres, dá para chegar aos 10");
+  assert.deepEqual(p.alertas, []);
+});
+
+test("perto da prova, o que é semestral vira perda avisada", () => {
+  const perto = { prova: "x", nome: "X", data: "2026-11-01", perfil: "sesdf" };
+  const p = potencialCurriculo({}, [perto], "2026-08-16");
+  assert.equal(p.semestres, 0);
+  assert.ok(p.alcancavel < TETO_CURRICULO, "não dá mais para chegar aos 10");
+
+  const semestrais = ITENS_CURRICULO.filter((i) => i.semestral).map((i) => i.alinea);
+  for (const a of semestrais) {
+    assert.ok(p.alertas.some((x) => x.alinea === a), `faltou avisar sobre a alínea ${a}`);
+  }
+  assert.ok(p.alertas.every((x) => x.motivo.includes("semestre")));
+});
+
+test("o que já foi conquistado não vira alerta", () => {
+  const perto = { prova: "x", nome: "X", data: "2026-11-01", perfil: "sesdf" };
+  // Monitoria já no teto: nada a perder ali.
+  const p = potencialCurriculo({ A: { quantidade: 2 } }, [perto], "2026-08-16");
+  assert.ok(!p.alertas.some((x) => x.alinea === "A"));
 });

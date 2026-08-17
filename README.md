@@ -215,6 +215,21 @@ O painel compara as horas que a sua rotina oferece até a prova com as horas est
 cobrir o edital e sustentar as revisões. Quando não cabe, ele diz de quanto seria a semana
 necessária. Serve para descobrir em janeiro que o plano é impossível, e não em junho.
 
+### Pontos de currículo (SES-DF)
+
+A nota final da SES-DF não é só a prova: é a objetiva **mais até 10 pontos de currículo**
+(edital, itens 12.1 e 14.2). Como cada questão vale 1,25, esses 10 pontos equivalem a
+**8 questões** — e não dependem de acertar nada no dia.
+
+O botão **currículo** traz o quadro de atribuição do edital, com as 13 alíneas, o valor
+unitário e o teto de cada uma. G e H dividem o mesmo teto; B e D não têm teto próprio.
+
+O que o app faz além de somar: **monitoria, extensão, iniciação científica e experiência
+no SUS só contam por semestre completo**. Conforme a prova se aproxima, o teto realmente
+alcançável cai — e o painel mostra esse número, não só o total atual. É a diferença entre
+descobrir a janela com quatro semestres pela frente ou seis meses antes, quando já não dá
+para recuperar.
+
 ### Temas e pesos
 
 São 97 temas nas **sete áreas da Matriz de Referência do ENAMED** (Portaria INEP
@@ -247,7 +262,7 @@ guardado em `localStorage` é convertido para eventos e enviado. A chave antiga
 ## Desenvolvimento
 
 ```bash
-npm test                 # 87 testes de lógica e autenticação, sem dependências
+npm test                 # 99 testes de lógica e autenticação, sem dependências
 npm run db:local         # cria a tabela no D1 local
 npm run dev              # monta publico/ e sobe em http://localhost:8788
                          # (o app é servido de publico/: rode build.sh depois de editar)

@@ -456,6 +456,122 @@ export function notaProjetada(temas, perfil = PERFIL_PADRAO) {
   };
 }
 
+/* ---------- currículo ----------
+   A nota final da SES-DF é a prova objetiva mais até 10 pontos de currículo
+   (edital, itens 12.1 e 14.2). Com a questão valendo 1,25, esses 10 pontos
+   equivalem a 8 questões — e não dependem de acertar nada no dia da prova.
+
+   Quadro de atribuição do Anexo do edital. Os tetos explícitos somam
+   exatamente 10,0; B e D não têm teto próprio e entram dentro do limite
+   global. `semestral` marca o que só pontua por semestre completo — é o que
+   tem prazo, porque não dá para recuperar depois. */
+export const TETO_CURRICULO = 10;
+
+export const ITENS_CURRICULO = [
+  { alinea: "A", nome: "Monitoria em disciplina da graduação", valor: 0.5, teto: 1.0, unidade: "semestre", semestral: true },
+  // B e D não têm teto no edital: só o limite global de 10 os segura. Para o
+  // cálculo de potencial existe um teto prático, porque planejar 100 cursos de
+  // extensão não é plano — mas ele não entra na pontuação, só na projeção.
+  { alinea: "B", nome: "Curso de extensão na área médica (≥20h)", valor: 0.1, teto: null, tetoPratico: 1.0, unidade: "curso" },
+  { alinea: "C", nome: "Programa ou projeto de extensão", valor: 0.5, teto: 1.0, unidade: "semestre", semestral: true },
+  { alinea: "D", nome: "Estágio em APS ou hospital com residência", valor: 0.1, teto: null, tetoPratico: 1.0, unidade: "40 horas" },
+  { alinea: "E", nome: "Participação em congresso ou jornada", valor: 0.1, teto: 1.0, unidade: "participação" },
+  { alinea: "F", nome: "Comunicação — oral, pôster ou banner", valor: 0.2, teto: 1.0, unidade: "comunicação" },
+  { alinea: "G", nome: "Artigo com DOI em revista indexada", valor: 0.5, teto: 1.0, unidade: "artigo" },
+  { alinea: "H", nome: "Artigo em revista não indexada", valor: 0.2, teto: 1.0, unidade: "artigo", tetoCom: "G" },
+  { alinea: "I", nome: "Iniciação científica ou PET", valor: 0.5, teto: 1.0, unidade: "semestre", semestral: true },
+  { alinea: "J", nome: "Premiação na área médica", valor: 0.25, teto: 0.5, unidade: "premiação" },
+  { alinea: "K", nome: "Projeto Rondon", valor: 1.0, teto: 1.0, unidade: "participação" },
+  { alinea: "L", nome: "Experiência em serviço do SUS (≥20h/sem)", valor: 0.5, teto: 2.0, unidade: "5 meses", semestral: true },
+  { alinea: "M", nome: "Internato com conceito A ou nota ≥ 8", valor: 0.5, teto: 0.5, unidade: "histórico" },
+];
+
+const itemCurriculo = (alinea) => ITENS_CURRICULO.find((i) => i.alinea === alinea);
+
+/** Pontos por alínea e total, respeitando os tetos individuais, o teto
+ *  compartilhado entre G e H, e o limite global de 10. */
+export function pontosCurriculo(curriculo = {}) {
+  const bruto = {};
+  for (const item of ITENS_CURRICULO) {
+    const q = curriculo[item.alinea]?.quantidade ?? 0;
+    bruto[item.alinea] = Math.max(0, q) * item.valor;
+  }
+
+  // G e H dividem o mesmo teto de 1,0: o artigo indexado entra primeiro.
+  const porAlinea = {};
+  for (const item of ITENS_CURRICULO) {
+    if (item.tetoCom) continue;
+    const juntos = ITENS_CURRICULO.filter((o) => o.tetoCom === item.alinea);
+    if (!juntos.length) {
+      porAlinea[item.alinea] = item.teto === null ? bruto[item.alinea] : Math.min(bruto[item.alinea], item.teto);
+      continue;
+    }
+    let sobra = item.teto;
+    porAlinea[item.alinea] = Math.min(bruto[item.alinea], sobra);
+    sobra -= porAlinea[item.alinea];
+    for (const o of juntos) {
+      porAlinea[o.alinea] = Math.min(bruto[o.alinea], sobra);
+      sobra -= porAlinea[o.alinea];
+    }
+  }
+
+  const soma = Object.values(porAlinea).reduce((s, v) => s + v, 0);
+  return {
+    porAlinea,
+    total: Math.min(soma, TETO_CURRICULO),
+    perdidoPorTeto: Math.max(0, soma - TETO_CURRICULO),
+  };
+}
+
+/** Quantos semestres acadêmicos ainda cabem até a prova. Meio ano, arredondado
+ *  para baixo: semestre incompleto não pontua. */
+export function semestresRestantes(provas, hj = hoje()) {
+  const alvo = provaAlvo(provas, hj);
+  if (!alvo) return null;
+  return Math.max(0, Math.floor(diasEntre(hj, alvo.data) / 182));
+}
+
+/** O que ainda dá para somar, e o que já não dá.
+ *  Os itens semestrais têm prazo: quem lembra deles perto da prova já perdeu
+ *  a janela, porque semestre não se recupera. */
+export function potencialCurriculo(curriculo = {}, provas, hj = hoje()) {
+  const atual = pontosCurriculo(curriculo);
+  const semestres = semestresRestantes(provas, hj);
+  const alertas = [];
+  let alcancavel = atual.total;
+
+  for (const item of ITENS_CURRICULO) {
+    const feito = atual.porAlinea[item.alinea] ?? 0;
+    const tetoItem = item.teto ?? item.tetoPratico ?? TETO_CURRICULO;
+    const falta = Math.max(0, tetoItem - feito);
+    if (falta <= 0) continue;
+
+    if (item.semestral && semestres !== null) {
+      // Cada semestre restante rende no máximo um `valor`.
+      const possivel = Math.min(falta, semestres * item.valor);
+      alcancavel += possivel;
+      if (possivel < falta) {
+        alertas.push({
+          alinea: item.alinea, nome: item.nome,
+          perdido: +(falta - possivel).toFixed(2),
+          motivo: semestres === 0
+            ? "não há mais semestre completo antes da prova"
+            : `só cabem mais ${semestres} semestre${semestres > 1 ? "s" : ""}`,
+        });
+      }
+    } else {
+      alcancavel += falta;
+    }
+  }
+
+  return {
+    ...atual,
+    semestres,
+    alcancavel: Math.min(alcancavel, TETO_CURRICULO),
+    alertas,
+  };
+}
+
 /* ---------- a carga cabe no tempo? ----------
    O equivalente ao "rebalance": descobrir em janeiro que o plano é impossível,
    e não em junho. */
@@ -507,6 +623,7 @@ export function derivar(eventos) {
   const removidos = new Set();
   const provas = new Map();
   const simulados = [];
+  const curriculo = {};
   let rotina = null;
 
   // Anulações valem para estudo e simulado, então saem antes de qualquer um
@@ -550,6 +667,18 @@ export function derivar(eventos) {
       case "rotina":
         rotina = normalizarRotina(ev.dados.minutos) ?? rotina;
         break;
+      case "curriculo": {
+        // Última palavra por alínea: o evento diz "hoje eu tenho N destes".
+        const item = ITENS_CURRICULO.find((i) => i.alinea === ev.dados.alinea);
+        if (!item) break;
+        const q = Number.isInteger(ev.dados.quantidade) && ev.dados.quantidade >= 0 ? ev.dados.quantidade : 0;
+        if (q === 0) delete curriculo[item.alinea];
+        else curriculo[item.alinea] = {
+          quantidade: q,
+          descricao: typeof ev.dados.descricao === "string" ? ev.dados.descricao.slice(0, 200) : null,
+        };
+        break;
+      }
       case "simulado":
         if (!anulados.has(ev.id)) {
           simulados.push({ ...normalizarRegistro(ev.dados), prova: ev.dados.prova ?? null });
@@ -576,6 +705,7 @@ export function derivar(eventos) {
 
   return {
     provas: lista,
+    curriculo,
     rotina: rotina ?? ROTINA_PADRAO,
     simulados: simulados.sort((a, b) => (a.d < b.d ? -1 : 1)),
     temas: [...catalogo.values()].filter((t) => !removidos.has(t.id)),

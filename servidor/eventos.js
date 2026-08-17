@@ -22,6 +22,8 @@ const idTema = (v) => texto(v, 160) && /^[a-z0-9-]+\/[a-z0-9-]+$/.test(v);
 const inteiro = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
 
 const PERFIS = ["enamed", "sesdf"];
+// Alíneas do quadro de atribuição de pontos do edital da SES-DF.
+const ALINEAS = "ABCDEFGHIJKLM".split("");
 const idProva = (v) => texto(v, 60) && /^[a-z0-9-]+$/.test(v);
 
 // Desempenho pode vir como percentual (formato antigo) ou como contagem.
@@ -61,6 +63,9 @@ const SCHEMAS = {
   rotina: (d) =>
     Array.isArray(d.minutos) && d.minutos.length === 7 &&
     d.minutos.every((m) => inteiro(m, 0, 16 * 60)),
+  curriculo: (d) =>
+    ALINEAS.includes(d.alinea) && inteiro(d.quantidade, 0, 200) &&
+    (d.descricao === undefined || (typeof d.descricao === "string" && d.descricao.length <= 200)),
   simulado: (d) =>
     dataISO(d.data) && temDesempenho(d) && minutosOpcionais(d) &&
     (d.prova === undefined || d.prova === null || idProva(d.prova)),
@@ -93,6 +98,8 @@ function limpar(ev) {
     : ev.tipo === "tema-"   ? { tema: ev.dados.tema }
     : ev.tipo === "prova-"  ? { prova: ev.dados.prova }
     : ev.tipo === "rotina"  ? { minutos: ev.dados.minutos }
+    : ev.tipo === "curriculo" ? so({ alinea: ev.dados.alinea, quantidade: ev.dados.quantidade,
+                                     descricao: ev.dados.descricao })
     : ev.tipo === "simulado" ? so({ data: ev.dados.data, prova: ev.dados.prova, acertos: ev.dados.acertos,
                                     questoes: ev.dados.questoes, certas: ev.dados.certas, minutos: ev.dados.minutos })
     :                         so({ prova: ev.dados.prova, nome: ev.dados.nome, data: ev.dados.data, perfil: ev.dados.perfil });

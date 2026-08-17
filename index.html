@@ -20,6 +20,7 @@
   <div class="brandrow">
     <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow">cronograma de residência</span></h1>
     <div class="topo-acoes">
+      <button class="ghost" id="btnCurriculo">currículo</button>
       <button class="ghost" id="btnSimulado">simulado</button>
       <button class="ghost" id="btnRotina">rotina</button>
       <button class="ghost" id="btnProvas">provas</button>
@@ -65,6 +66,7 @@
   <div class="painel-corpo">
     <p class="carga" id="carga"></p>
     <div id="areas" class="areas"></div>
+    <p class="curriculo-resumo mono" id="curriculoResumo"></p>
     <p class="erros-resumo mono" id="errosResumo"></p>
     <p class="ultimo-simulado mono" id="ultimoSimulado"></p>
   </div>
@@ -187,6 +189,23 @@
   <div class="acoes">
     <button class="btn sec" value="cancel" type="submit" formnovalidate>fechar</button>
     <button class="btn" value="ok" type="submit" id="btnSalvarProva">salvar prova</button>
+  </div>
+</form></dialog>
+
+<!-- currículo -->
+<dialog id="dlgCurriculo" class="largo"><form method="dialog" class="dlg">
+  <span class="eyebrow">segunda etapa</span>
+  <h3>Pontos de currículo</h3>
+  <p class="sub">A nota final da SES-DF é a prova objetiva <strong>mais até 10 pontos</strong>
+    de currículo. Como cada questão vale 1,25, esses 10 pontos equivalem a 8 questões —
+    e não dependem de você acertar nada no dia.</p>
+
+  <div class="curriculo" id="curriculoLista"></div>
+
+  <p class="hint" id="curriculoHint"></p>
+  <div class="acoes">
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
+    <button class="btn" value="ok" type="submit" id="curOk">salvar</button>
   </div>
 </form></dialog>
 

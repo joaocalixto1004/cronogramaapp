@@ -15,6 +15,7 @@ import {
   provaAlvo, fase, intervaloAjustado, duracaoTipica, planoDoDia,
   derivar, eventosDoFormatoAntigo,
   CATEGORIAS_ERRO, NOME_ERRO, notaProjetada, desempenhoPorArea, viabilidade,
+  ITENS_CURRICULO, TETO_CURRICULO, pontosCurriculo, potencialCurriculo,
 } from "./logica.js";
 
 const CHAVE_ANTIGA = "ritmo.v1";
@@ -26,11 +27,14 @@ const $ = (id) => document.getElementById(id);
 // textContent. O único innerHTML restante é o SVG do traço, gerado aqui.
 
 /* ---------- estado de tela ---------- */
-let dados = { provas: [], rotina: ROTINA_PADRAO, simulados: [], temas: [] };
+let dados = { provas: [], rotina: ROTINA_PADRAO, simulados: [], temas: [], curriculo: {} };
 let alvo = null;                 // prova mais próxima ainda não realizada
 let filtro = "todos";
 let alvoId = null;               // tema aberto no diálogo de registro
 let provaEditando = null;        // prova em correção no diálogo de provas
+
+// Pontos de currículo: "1,3" e não "1,30"; "1" e não "1,00".
+const pontos = (n) => n.toFixed(2).replace(/\.?0+$/, "").replace(".", ",");
 
 const horas = (min) => {
   if (!min) return "0";
@@ -394,6 +398,24 @@ function renderPainel() {
       `Seriam ${horas(v.semanaNecessaria)} por semana em vez de ${horas(v.semanaAtual)} — ` +
       `ou menos temas.`;
   }
+
+  // Currículo: quanto já vale e o que a janela dos semestrais ainda permite.
+  const cur = potencialCurriculo(dados.curriculo, dados.provas, hoje());
+  const resCur = $("curriculoResumo");
+  const pedacos = [
+    document.createTextNode("currículo: "),
+    Object.assign(document.createElement("b"), { textContent: `${pontos(cur.total)} de ${TETO_CURRICULO} pontos` }),
+  ];
+  if (cur.semestres !== null && cur.alcancavel < TETO_CURRICULO) {
+    pedacos.push(document.createTextNode(" — teto real hoje: "));
+    pedacos.push(Object.assign(document.createElement("span"), {
+      className: "perde", textContent: pontos(cur.alcancavel),
+    }));
+    pedacos.push(document.createTextNode(`, com ${cur.semestres} semestre${cur.semestres === 1 ? "" : "s"} restante${cur.semestres === 1 ? "" : "s"}`));
+  } else if (cur.semestres !== null) {
+    pedacos.push(document.createTextNode(` — os 10 ainda cabem em ${cur.semestres} semestres`));
+  }
+  resCur.replaceChildren(...pedacos);
 
   // Caderno de erros: o que domina.
   const soma = {};
@@ -772,6 +794,94 @@ dlgProvas.addEventListener("close", () => {
   } else {
     avisar(`${nome} em ${fmt(data)}.`);
   }
+});
+
+/* ---------- diálogo: currículo ---------- */
+const dlgCurriculo = $("dlgCurriculo");
+const campoCur = (alinea) => $("cur" + alinea);
+
+// A grade é montada uma vez; os valores entram na abertura.
+$("curriculoLista").replaceChildren(...ITENS_CURRICULO.map((item) => {
+  const li = document.createElement("div");
+  li.className = "item";
+  if (item.semestral) li.dataset.semestral = "1";
+
+  const rot = document.createElement("label");
+  rot.className = "rotulo";
+  rot.htmlFor = "cur" + item.alinea;
+  rot.append(document.createTextNode(item.nome));
+  const sub = document.createElement("small");
+  sub.textContent =
+    `${item.alinea} · ${pontos(item.valor)} por ${item.unidade}` +
+    (item.teto ? ` · máx ${pontos(item.teto)}` : "") +
+    (item.semestral ? " · tem prazo" : "");
+  rot.append(sub);
+
+  const inp = document.createElement("input");
+  inp.type = "number"; inp.id = "cur" + item.alinea;
+  inp.min = "0"; inp.max = "200"; inp.step = "1"; inp.placeholder = "0";
+  inp.inputMode = "numeric";
+  inp.addEventListener("input", atualizaCurriculo);
+
+  const pts = document.createElement("span");
+  pts.className = "pts";
+  pts.id = "pts" + item.alinea;
+
+  li.append(rot, inp, pts);
+  return li;
+}));
+
+function lerCurriculo() {
+  const c = {};
+  for (const item of ITENS_CURRICULO) {
+    const v = parseInt(campoCur(item.alinea).value, 10);
+    if (Number.isFinite(v) && v > 0) c[item.alinea] = { quantidade: v };
+  }
+  return c;
+}
+
+function atualizaCurriculo() {
+  const c = lerCurriculo();
+  const p = pontosCurriculo(c);
+  for (const item of ITENS_CURRICULO) {
+    const ganho = p.porAlinea[item.alinea] ?? 0;
+    const el = $("pts" + item.alinea);
+    el.textContent = ganho ? pontos(ganho) : "—";
+    el.dataset.cheio = item.teto && ganho >= item.teto ? "1" : "0";
+  }
+  const pot = potencialCurriculo(c, dados.provas, hoje());
+  $("curriculoHint").textContent =
+    pot.semestres === null
+      ? `${pontos(p.total)} de ${TETO_CURRICULO} pontos. Cadastre uma prova para ver o prazo dos itens semestrais.`
+      : pot.alertas.length
+        ? `${pontos(p.total)} de ${TETO_CURRICULO}. Restam ${pot.semestres} semestre(s): o teto real hoje é ${pontos(pot.alcancavel)}, porque monitoria, extensão, IC e serviço no SUS só contam por semestre completo.`
+        : `${pontos(p.total)} de ${TETO_CURRICULO}. Com ${pot.semestres} semestres restantes, os 10 pontos ainda cabem.`;
+}
+
+$("btnCurriculo").addEventListener("click", () => {
+  for (const item of ITENS_CURRICULO) {
+    campoCur(item.alinea).value = dados.curriculo?.[item.alinea]?.quantidade ?? "";
+  }
+  atualizaCurriculo();
+  dlgCurriculo.showModal();
+});
+
+dlgCurriculo.addEventListener("close", () => {
+  if (dlgCurriculo.returnValue !== "ok") return;
+  const antes = dados.curriculo ?? {};
+  const agora = lerCurriculo();
+
+  // Um evento por alínea que mudou: o log guarda "hoje eu tenho N destes".
+  let mudou = 0;
+  for (const item of ITENS_CURRICULO) {
+    const q = agora[item.alinea]?.quantidade ?? 0;
+    if ((antes[item.alinea]?.quantidade ?? 0) === q) continue;
+    sync.adicionar("curriculo", { alinea: item.alinea, quantidade: q });
+    mudou++;
+  }
+  if (!mudou) return;
+  recalcular();
+  avisar(`Currículo: ${pontos(pontosCurriculo(agora).total)} de ${TETO_CURRICULO} pontos.`);
 });
 
 /* ---------- diálogo: simulado ---------- */
