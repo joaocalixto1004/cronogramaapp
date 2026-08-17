@@ -4,3 +4,8 @@ node_modules/
 publico/
 package-lock.json
 bun.lock
+
+# Documentos pessoais: o comprovante de matrícula traz CPF, RG e data de
+# nascimento, e este repositório é público. Nada disso pode ser versionado.
+*.pdf
+dados-pessoais/
