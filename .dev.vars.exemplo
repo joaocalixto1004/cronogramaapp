@@ -1,0 +1,6 @@
+# Copie para .dev.vars (que o .gitignore ja bloqueia) e preencha.
+# .dev.vars vale so no `npm run dev`. Em producao a chave entra por:
+#     npx wrangler@4 secret put NVAPI_KEY
+
+MODO_DEV=1
+NVAPI_KEY=nvapi-cole-sua-chave-aqui

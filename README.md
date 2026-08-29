@@ -244,6 +244,73 @@ descobrindo o perfil de cada banca.
 
 ---
 
+## Modelos de IA (NVIDIA)
+
+`POST /api/ia` fala com o catálogo gratuito da NVIDIA, que serve uma API
+compatível com a da OpenAI. A rota fica atrás do Access, como todo o `/api/*`.
+
+**Por que passa pelo Worker.** A chave não pode ir para o navegador. O site é
+estático e público: o que estiver em `app.js` está visível a quem abrir o
+DevTools, e uma `NVAPI_KEY` exposta é conta de outra pessoa gastando os
+créditos. O cliente fala com `/api/ia` e só o Worker conhece a chave.
+
+**O cliente escolhe a tarefa, não o modelo.** Se o id do modelo viesse do
+navegador, qualquer um poderia apontar para o mais caro do catálogo. O mapa
+`tarefa → modelo` vive em `servidor/ia.js`; trocar de modelo é uma linha lá,
+não um deploy do front.
+
+| tarefa   | modelo                              | mediana medida |
+|----------|-------------------------------------|----------------|
+| `rapido` | `openai/gpt-oss-120b`               | 409 ms         |
+| `geral`  | `nvidia/nemotron-3-super-120b-a12b` | 605 ms         |
+| `codigo` | `minimaxai/minimax-m3`              | 1213 ms        |
+| `agente` | `moonshotai/kimi-k3`                | 2129 ms        |
+
+Medianas de 3 chamadas reais. Dois modelos ficaram de fora por medição:
+`deepseek-v4-flash-0731` tem "flash" no nome e deu 14 s com um 504 no meio;
+`deepseek-v4-pro-0813` responde, mas com ~180 s de cold start — tempo demais
+para o Worker segurar.
+
+Uso:
+
+```js
+const r = await fetch("api/ia", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    tarefa: "rapido",
+    sistema: "Responda em português, direto ao ponto.",
+    mensagens: [{ papel: "user", texto: "resuma meu desempenho em cardiologia" }],
+  }),
+});
+const { texto, modelo, tokens } = await r.json();
+```
+
+Com `fluxo: true` a resposta vem como `text/event-stream`, repassada sem
+bufferizar, e o texto aparece conforme chega.
+
+O que a rota recusa antes de gastar crédito: tarefa fora do mapa, papel que
+não seja `user`/`assistant`, mensagem acima de 8 000 caracteres, conversa
+acima de 24 000, mais de 20 mensagens. Campo extra enviado pelo cliente é
+descartado na reserialização, como em `eventos.js`.
+
+Erros: **503** sem chave no ambiente, **429** repassado tal qual (o limite
+gratuito é ~40 req/min e chega fácil em rajada), **502** para qualquer falha
+do lado da NVIDIA. O corpo do erro dela nunca é repassado, porque mensagens de
+auth podem conter a chave.
+
+**A chave.** Local, em `.dev.vars` (já no `.gitignore`) — copie de
+`.dev.vars.exemplo`. Em produção:
+
+```
+npx wrangler@4 secret put NVAPI_KEY
+```
+
+Gerada em <https://build.nvidia.com>. O plano gratuito dá ~1 000 créditos de
+inferência no cadastro (até 5 000 sob pedido); não é ilimitado.
+
+---
+
 ## Backup
 
 Não é mais tarefa sua: o histórico fica no D1 e chega sozinho em qualquer aparelho onde
@@ -302,6 +369,7 @@ _headers                 CSP e política de cache
 worker.js                entrada: roteia /api/* e delega o resto aos assets
 servidor/acesso.js       verifica o JWT do Cloudflare Access
 servidor/eventos.js      GET (por cursor) e POST (idempotente)
+servidor/ia.js           ponte para os modelos da NVIDIA (a chave nunca sai daqui)
 build.sh                 monta publico/ e carimba o commit no sw.js
 wrangler.toml            entrada, assets e binding do D1
 schema.sql               tabela de eventos
