@@ -18,6 +18,10 @@
   Cache-Control: no-cache
 /estilo.css
   Cache-Control: no-cache
+/ia.html
+  Cache-Control: no-cache
+/ia-chat.js
+  Cache-Control: no-cache
 
 # Fontes são imutáveis: o conteúdo nunca muda sem o nome mudar junto.
 /fontes/*

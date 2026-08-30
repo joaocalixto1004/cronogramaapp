@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Assistente — Ritmo</title>
+<meta name="description" content="Converse com os modelos de IA da NVIDIA, com histórico separado por tipo de tarefa.">
+<meta name="theme-color" content="#12262F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="estilo.css">
+<link rel="preload" href="fontes/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fontes/plex-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<script type="module" src="ia-chat.js"></script>
+</head>
+<body>
+<div class="wrap wrap-ia">
+
+<header>
+  <div class="brandrow">
+    <h1 class="brand">Ritmo<span>.</span> <span class="eyebrow">assistente</span></h1>
+    <div class="topo-acoes">
+      <a class="ghost" href="./">cronograma</a>
+    </div>
+  </div>
+</header>
+
+<div class="ia-barra">
+  <label class="eyebrow" for="iaTarefa">tarefa</label>
+  <select id="iaTarefa">
+    <option value="rapido">rápido — respostas curtas do dia a dia</option>
+    <option value="geral">geral — perguntas abertas</option>
+    <option value="codigo">código — programação</option>
+    <option value="agente">agente — planejamento em etapas</option>
+  </select>
+  <button class="ghost" id="iaLimpar" type="button" title="Apaga o histórico desta tarefa">limpar</button>
+</div>
+
+<p class="ia-aviso" id="iaAviso" hidden></p>
+
+<main class="ia-conversa" id="iaConversa" aria-live="polite">
+  <p class="ia-vazio">Sem conversa ainda nesta tarefa.</p>
+</main>
+
+<form class="ia-forma" id="iaForma">
+  <textarea id="iaEntrada" rows="1" placeholder="Escreva e pressione Enter…"></textarea>
+  <button class="btn" id="iaEnviar" type="submit">Enviar</button>
+</form>
+
+</div>
+</body>
+</html>
