@@ -1,5 +1,13 @@
 # Precisa bater com o nome do Worker na Cloudflare, senão o build avisa que
 # houve divergência e abre um pull request automático para "corrigir".
+#
+# ACCESS_TEAM, ACCESS_AUD e NVAPI_KEY vivem só no painel (Settings > Runtime
+# variables and secrets), nunca aqui — são segredo/config de conta, não do
+# código. Pegadinha registrada: adicionar essas variáveis pelo painel e
+# clicar em "Redeploy" na mesma versão já publicada não foi suficiente para
+# elas chegarem no runtime (500 "sem autenticação" continuou, com wallTimeMs
+# 0 — nem tentou rede). Este comentário existe para forçar um build novo via
+# commit, que é o próximo teste.
 name = "cronogramaapp"
 main = "worker.js"
 compatibility_date = "2026-08-01"
