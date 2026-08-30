@@ -7,6 +7,7 @@
  */
 import { barrarAcesso } from "./servidor/acesso.js";
 import { lerEventos, gravarEventos } from "./servidor/eventos.js";
+import { conversarIA } from "./servidor/ia.js";
 
 const json = (corpo, status = 200) =>
   Response.json(corpo, { status, headers: { "Cache-Control": "no-store" } });
@@ -28,6 +29,11 @@ export default {
     if (url.pathname === "/api/eventos") {
       if (request.method === "GET") return lerEventos(request, env);
       if (request.method === "POST") return gravarEventos(request, env);
+      return json({ erro: "método não suportado" }, 405);
+    }
+
+    if (url.pathname === "/api/ia") {
+      if (request.method === "POST") return conversarIA(request, env);
       return json({ erro: "método não suportado" }, 405);
     }
 

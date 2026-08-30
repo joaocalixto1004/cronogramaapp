@@ -77,6 +77,9 @@ header{
 .counter .lbl p{margin:2px 0 0;font-size:12.5px;color:var(--ink-2)}
 .ghost{background:none;border:1px solid var(--rule);border-radius:var(--r);padding:5px 10px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
 .ghost:hover{border-color:var(--azul);color:var(--azul)}
+/* .ghost também vira link de navegação (ex: para ia.html) — <a> não herda
+   a aparência de botão do <button> sozinho. */
+a.ghost{display:inline-block;text-decoration:none}
 
 .topo-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .counter .lbl .seguinte{color:var(--ink-3);font-size:11.5px;margin-top:2px}
@@ -334,3 +337,41 @@ input[type=range]{padding:0}
 @media (prefers-reduced-motion:no-preference){
   .row,.reg,.queue li{transition:background .12s ease,color .12s ease}
 }
+
+/* ---------- assistente (ia.html) ----------
+   Página própria, fora da SPA principal: o cronograma não precisa carregar
+   o chat, e o chat não precisa da lógica de 1056 linhas do app.js. */
+.wrap-ia{display:flex;flex-direction:column;min-height:100vh}
+.wrap-ia header{margin-bottom:14px}
+
+.ia-barra{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.ia-barra label{margin-right:-2px}
+.ia-barra select{
+  flex:1;min-width:200px;padding:7px 8px;border:1px solid var(--rule);border-radius:var(--r);
+  background:#fff;color:var(--ink);font:13px "IBM Plex Sans",sans-serif;
+}
+
+.ia-aviso{
+  font-size:12px;color:var(--vermelho);background:color-mix(in srgb,var(--vermelho) 10%,transparent);
+  border-left:2px solid var(--vermelho);padding:8px 10px;margin:0 0 10px;
+}
+
+.ia-conversa{flex:1;display:flex;flex-direction:column;gap:10px;padding:4px 0 16px;overflow-y:auto}
+.ia-vazio{color:var(--ink-3);font-size:13px;text-align:center;margin-top:40px}
+
+.ia-msg{display:flex;flex-direction:column;max-width:min(560px,86%)}
+.ia-msg-eu{align-self:flex-end;align-items:flex-end}
+.ia-msg-ia{align-self:flex-start;align-items:flex-start}
+.ia-msg-erro{align-self:center;max-width:92%}
+.ia-balao{padding:9px 12px;border-radius:10px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.ia-msg-eu .ia-balao{background:var(--ink);color:var(--paper-2);border-bottom-right-radius:3px}
+.ia-msg-ia .ia-balao{background:#fff;border:1px solid var(--rule);border-bottom-left-radius:3px}
+.ia-msg-erro .ia-balao{background:color-mix(in srgb,var(--vermelho) 12%,transparent);color:var(--vermelho);border:1px solid var(--vermelho)}
+.ia-legenda{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink-3);margin-top:3px;padding:0 2px}
+
+.ia-forma{display:flex;gap:8px;align-items:flex-end;position:sticky;bottom:0;background:var(--paper);padding:10px 0 4px}
+.ia-forma textarea{
+  flex:1;resize:none;max-height:160px;padding:9px 10px;border:1px solid var(--rule);border-radius:var(--r);
+  background:#fff;color:var(--ink);font:13.5px "IBM Plex Sans",sans-serif;line-height:1.4;
+}
+.ia-forma textarea:focus-visible{outline:2px solid var(--azul);outline-offset:1px}

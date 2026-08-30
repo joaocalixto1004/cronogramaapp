@@ -16,7 +16,7 @@ VERSAO=$(printf '%s' "$VERSAO" | cut -c1-8)
 rm -rf publico
 mkdir -p publico
 
-cp index.html estilo.css app.js sync.js logica.js manifest.webmanifest icone.svg _headers publico/
+cp index.html ia.html estilo.css app.js sync.js ia-chat.js logica.js manifest.webmanifest icone.svg _headers publico/
 cp -R fontes publico/fontes
 
 # Único arquivo que não é copiado literalmente: o SW recebe o carimbo.

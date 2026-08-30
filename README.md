@@ -244,6 +244,93 @@ descobrindo o perfil de cada banca.
 
 ---
 
+## Modelos de IA (NVIDIA)
+
+`POST /api/ia` fala com o catálogo gratuito da NVIDIA, que serve uma API
+compatível com a da OpenAI. A rota fica atrás do Access, como todo o `/api/*`.
+A página **`/ia`** (link "assistente" no cabeçalho do cronograma) é o cliente
+dela: um chat simples, com histórico separado por tarefa em `localStorage`.
+
+**Por que passa pelo Worker.** A chave não pode ir para o navegador. O site é
+estático e público: o que estiver em `app.js` está visível a quem abrir o
+DevTools, e uma `NVAPI_KEY` exposta é conta de outra pessoa gastando os
+créditos. O cliente fala com `/api/ia` e só o Worker conhece a chave — a CSP
+do site (`connect-src 'self'`) reforça isso: uma chamada direta à NVIDIA
+nem seria permitida pelo navegador.
+
+**O cliente escolhe a tarefa, não o modelo.** Se o id viesse do navegador,
+qualquer um poderia apontar para o mais caro do catálogo. O mapa
+`tarefa → lista de modelos` vive em `servidor/ia.js`.
+
+**Por que lista, e não um modelo fixo.** Escaneamos os 83 modelos que
+`/v1/models` lista para esta chave, um por um, chamando `/chat/completions`
+de verdade — não por nome. Resultado: só 15 a 17 respondiam naquele momento;
+o resto ou não tinha inferência hospedada (404) ou estava sem cota. E
+`openai/gpt-oss-120b`, o mais rápido e estável de toda uma sessão anterior
+(409 ms, 3/3 sem falha), apareceu **fora do ar** nesse scan — confirmado com
+`curl` direto, sem nenhum código nosso no meio. Um modelo fixo por tarefa
+não sobrevive a isso. Testando de verdade contra a NVIDIA (não só com mock),
+a tarefa `codigo` — que tinha só 2 candidatos — ficou sem nenhum responder ao
+mesmo tempo (`minimax-m3` sem cota, `kimi-k3` sem resposta em 20 s); por isso
+toda tarefa tem hoje 3 candidatos, tentados em ordem:
+
+| tarefa   | candidatos, em ordem                                                          |
+|----------|--------------------------------------------------------------------------------|
+| `rapido` | `gpt-oss-120b` → `gpt-oss-20b` → `nemotron-3-super-120b-a12b`                  |
+| `geral`  | `nemotron-3-super-120b-a12b` → `gpt-oss-20b` → `kimi-k3`                       |
+| `codigo` | `minimax-m3` → `kimi-k3` → `gpt-oss-20b`                                       |
+| `agente` | `kimi-k3` → `minimax-m3` → `gpt-oss-20b`                                       |
+
+A troca acontece em 429 (sem cota), 5xx, timeout de 20 s ou resposta sem
+conteúdo — no máximo 3 tentativas por pedido. `deepseek-v4-flash-0731` e
+`deepseek-v4-pro-0813` ficam de fora de propósito: o primeiro foi o mais
+lento medido apesar do nome (14,5 s, com 504 e depois 529 num scan
+seguinte); o segundo tem ~180 s de cold start, tempo demais para qualquer
+candidato de failover.
+
+Uso:
+
+```js
+const r = await fetch("api/ia", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    tarefa: "rapido",
+    sistema: "Responda em português, direto ao ponto.",
+    mensagens: [{ papel: "user", texto: "resuma meu desempenho em cardiologia" }],
+  }),
+});
+const { texto, modelo, tokens } = await r.json();
+```
+
+Com `fluxo: true` a resposta vem como `text/event-stream`, repassada sem
+bufferizar assim que o primeiro candidato responde 200 — não há mais troca de
+modelo depois que o streaming começa, porque parte do corpo já pode ter ido
+ao cliente. O header `X-Modelo` diz qual candidato de fato respondeu (útil
+quando o primeiro da lista está fora do ar e o segundo assumiu).
+
+O que a rota recusa antes de gastar crédito: tarefa fora do mapa, papel que
+não seja `user`/`assistant`, mensagem acima de 8 000 caracteres, conversa
+acima de 24 000, mais de 20 mensagens. Campo extra enviado pelo cliente é
+descartado na reserialização, como em `eventos.js`.
+
+Erros: **503** sem chave no ambiente, **429** só quando *todos* os candidatos
+da tarefa estavam sem cota, **502** quando a lista se esgotou por qualquer
+outro motivo (a mensagem lista quem foi tentado e por quê, sem repassar o
+corpo de erro de cada um — pode conter detalhe de auth).
+
+**A chave.** Local, em `.dev.vars` (já no `.gitignore`) — copie de
+`.dev.vars.exemplo`. Em produção:
+
+```
+npx wrangler@4 secret put NVAPI_KEY
+```
+
+Gerada em <https://build.nvidia.com>. O plano gratuito dá ~1 000 créditos de
+inferência no cadastro (até 5 000 sob pedido); não é ilimitado.
+
+---
+
 ## Backup
 
 Não é mais tarefa sua: o histórico fica no D1 e chega sozinho em qualquer aparelho onde
@@ -285,6 +372,7 @@ npx playwright@latest install --with-deps chromium
 npm i --no-save playwright
 node testes/navegador/fluxo.mjs
 node testes/navegador/migracao.mjs
+node testes/navegador/assistente.mjs   # chama a NVIDIA de verdade — precisa de NVAPI_KEY
 ```
 
 ---
@@ -292,16 +380,19 @@ node testes/navegador/migracao.mjs
 ## Arquivos
 
 ```
-index.html               markup
-estilo.css               estilos e fontes locais
+index.html               markup do cronograma
+ia.html                  markup do assistente (página própria, fora da SPA)
+estilo.css               estilos e fontes locais, das duas páginas
 logica.js                catálogo, provas, fases, ciclo e derivação  (puro, testável)
 sync.js                  fila offline e conversa com a API
-app.js                   render incremental e interações
+app.js                   render incremental e interações do cronograma
+ia-chat.js               cliente do assistente: streaming, histórico por tarefa
 sw.js                    cache offline, versão carimbada no build
 _headers                 CSP e política de cache
 worker.js                entrada: roteia /api/* e delega o resto aos assets
 servidor/acesso.js       verifica o JWT do Cloudflare Access
 servidor/eventos.js      GET (por cursor) e POST (idempotente)
+servidor/ia.js           ponte para os modelos da NVIDIA (a chave nunca sai daqui)
 build.sh                 monta publico/ e carimba o commit no sw.js
 wrangler.toml            entrada, assets e binding do D1
 schema.sql               tabela de eventos
