@@ -48,6 +48,17 @@ const TAREFA_PADRAO = "rapido";
 // depois um 529 no scan); o segundo tem ~180 s de cold start, tempo demais
 // para qualquer candidato de failover num Worker.
 
+/* Escolha explícita de modelo.
+ *
+ * O app fica atrás do Access — só o dono da conta chega até aqui — então o
+ * risco que justificava esconder o modelo ("qualquer um aponta pro mais
+ * caro") não se aplica mais do mesmo jeito. Mas a entrada ainda vem do
+ * navegador, e nada que vem de lá é confiável por definição: só um id desta
+ * lista passa. A lista é derivada de MODELOS, não duplicada à mão — um
+ * modelo que entra ali fica escolhível aqui de graça, e um que sai também.
+ */
+const MODELO_ESCOLHIVEL = new Set(Object.values(MODELOS).flat());
+
 const TENTATIVAS_MAX = 3;       // não tenta mais candidatos que isso por pedido
 const TIMEOUT_TENTATIVA_MS = 20000;
 
@@ -77,6 +88,14 @@ function limpar(corpo) {
     return { erro: `tarefa desconhecida: use ${Object.keys(MODELOS).join(", ")}` };
   }
 
+  let modeloForcado;
+  if (corpo.modelo !== undefined) {
+    if (!texto(corpo.modelo, 120) || !MODELO_ESCOLHIVEL.has(corpo.modelo)) {
+      return { erro: `modelo desconhecido: use um de ${[...MODELO_ESCOLHIVEL].join(", ")}` };
+    }
+    modeloForcado = corpo.modelo;
+  }
+
   const lista = corpo.mensagens;
   if (!Array.isArray(lista) || lista.length === 0) return { erro: "esperado {mensagens:[...]}" };
   if (lista.length > MENSAGENS_MAX) return { erro: `no máximo ${MENSAGENS_MAX} mensagens` };
@@ -98,7 +117,7 @@ function limpar(corpo) {
   }
   if (corpo.sistema) mensagens.unshift({ role: "system", content: corpo.sistema });
 
-  return { tarefa, mensagens, fluxo: corpo.fluxo === true };
+  return { tarefa, modeloForcado, mensagens, fluxo: corpo.fluxo === true };
 }
 
 /* ---------- chamada com failover ---------- */
@@ -170,13 +189,19 @@ export async function conversarIA(request, env) {
     stream: limpo.fluxo,
   };
 
-  const resultado = await tentarCandidatos(MODELOS[limpo.tarefa], corpoBase, env.NVAPI_KEY, null);
+  // Modelo escolhido à mão vira uma lista de um: sem substituto, de propósito
+  // — "precisamente qual modelo" só é precisamente esse; falhar tem que
+  // dizer que esse modelo falhou, não que outro assumiu escondido.
+  const candidatos = limpo.modeloForcado ? [limpo.modeloForcado] : MODELOS[limpo.tarefa];
+
+  const resultado = await tentarCandidatos(candidatos, corpoBase, env.NVAPI_KEY, null);
   if (resultado.falhou) {
     // O corpo de erro de cada tentativa não é repassado ao cliente — pode
     // conter detalhe de auth — mas a lista de quem foi tentado ajuda a
     // diagnosticar sem expor nada sensível.
     const semCota = resultado.falhou.every((t) => t.includes("sem cota"));
-    return erro(semCota ? 429 : 502, `nenhum modelo disponível para "${limpo.tarefa}": ${resultado.falhou.join("; ")}`);
+    const alvo = limpo.modeloForcado ? `o modelo "${limpo.modeloForcado}"` : `a tarefa "${limpo.tarefa}"`;
+    return erro(semCota ? 429 : 502, `nenhum modelo disponível para ${alvo}: ${resultado.falhou.join("; ")}`);
   }
 
   const { resposta, id } = resultado;
@@ -206,4 +231,4 @@ export async function conversarIA(request, env) {
   });
 }
 
-export { MODELOS };
+export { MODELOS, MODELO_ESCOLHIVEL };

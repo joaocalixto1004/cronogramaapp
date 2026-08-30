@@ -76,6 +76,52 @@ await pag.selectOption("#iaTarefa", "codigo");
 const vazioNaOutraTarefa = await pag.locator(".ia-vazio").isVisible();
 vazioNaOutraTarefa ? ok("tarefa \"codigo\" está vazia — não herdou o histórico de \"rapido\"") : erro("histórico vazou entre tarefas");
 
+console.log("\n7. Escolher um modelo específico no diálogo");
+await pag.click("#iaAbrirModelo");
+const dlgAberto = await pag.locator("#dlgModelo[open]").isVisible();
+dlgAberto ? ok("diálogo de modelo abriu") : erro("diálogo de modelo não abriu");
+
+await pag.check('input[name="modeloEscolha"][value="moonshotai/kimi-k3"]');
+await pag.click('#dlgModelo button[value="ok"]');
+// dialog.close() dispara "close" como tarefa enfileirada, não na hora — ler
+// o rótulo direto após o clique é uma corrida. Espera o texto de verdade.
+await pag.waitForFunction(() => document.getElementById("iaModeloAtual").textContent.includes("kimi-k3"), { timeout: 3000 })
+  .then(() => ok('rótulo do botão atualizou: "kimi-k3"'))
+  .catch(async () => erro(`rótulo não bateu: "${await pag.locator("#iaModeloAtual").textContent()}"`));
+
+console.log("\n8. Mensagem com modelo forçado — o X-Modelo bate com o escolhido");
+await pag.fill("#iaEntrada", "responda em 4 palavras: o que é um algoritmo");
+await pag.click("#iaEnviar");
+try {
+  await pag.waitForFunction(
+    () => {
+      const balões = document.querySelectorAll(".ia-msg-ia .ia-balao");
+      const ultimo = balões[balões.length - 1];
+      return ultimo && ultimo.textContent.trim().length > 0;
+    },
+    { timeout: 40000 },
+  );
+  const legendaForcada = await pag.locator(".ia-msg-ia .ia-legenda").last().textContent();
+  legendaForcada === "moonshotai/kimi-k3"
+    ? ok(`respondeu exatamente pelo modelo escolhido: "${legendaForcada}"`)
+    : erro(`esperava moonshotai/kimi-k3, veio "${legendaForcada}" — não deveria haver substituto`);
+} catch (e) {
+  erro(`resposta com modelo forçado não chegou em 40s: ${e.message}`);
+}
+
+console.log("\n9. Escolha do modelo persiste depois de recarregar");
+await pag.reload({ waitUntil: "networkidle" });
+const rotuloDepois = await pag.locator("#iaModeloAtual").textContent();
+rotuloDepois.includes("kimi-k3") ? ok("escolha de modelo sobreviveu ao reload") : erro(`escolha não persistiu: "${rotuloDepois}"`);
+
+console.log("\n10. Voltar para automático");
+await pag.click("#iaAbrirModelo");
+await pag.check('input[name="modeloEscolha"][value=""]');
+await pag.click('#dlgModelo button[value="ok"]');
+await pag.waitForFunction(() => document.getElementById("iaModeloAtual").textContent === "automático", { timeout: 3000 })
+  .then(() => ok("voltou para automático"))
+  .catch(async () => erro(`não voltou: "${await pag.locator("#iaModeloAtual").textContent()}"`));
+
 await navegador.close();
 
 console.log(`\n${falhas.length === 0 ? "TUDO OK" : `${falhas.length} FALHA(S)`}`);

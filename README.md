@@ -258,9 +258,16 @@ créditos. O cliente fala com `/api/ia` e só o Worker conhece a chave — a CSP
 do site (`connect-src 'self'`) reforça isso: uma chamada direta à NVIDIA
 nem seria permitida pelo navegador.
 
-**O cliente escolhe a tarefa, não o modelo.** Se o id viesse do navegador,
-qualquer um poderia apontar para o mais caro do catálogo. O mapa
-`tarefa → lista de modelos` vive em `servidor/ia.js`.
+**O cliente escolhe a tarefa — e, se quiser, o modelo exato.** O mapa
+`tarefa → lista de modelos` vive em `servidor/ia.js`, e é a fonte única de
+verdade: `MODELO_ESCOLHIVEL` (a lista de ids que o cliente pode pedir
+diretamente) é derivada dele, não duplicada à mão. A restrição original —
+"nunca o modelo, só a tarefa" — existia para um site público onde qualquer
+visitante poderia apontar para o mais caro do catálogo; aqui o app inteiro
+fica atrás do Access, então só o dono da conta chega até essa escolha. O
+diálogo "modelo" na página `/ia` deixa marcar um id específico; nesse caso
+não há failover — é precisamente aquele modelo, e se ele estiver fora do ar
+a mensagem falha em vez de outro assumir escondido.
 
 **Por que lista, e não um modelo fixo.** Escaneamos os 83 modelos que
 `/v1/models` lista para esta chave, um por um, chamando `/chat/completions`
@@ -295,7 +302,8 @@ const r = await fetch("api/ia", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    tarefa: "rapido",
+    tarefa: "rapido",             // usado só se "modelo" não vier
+    // modelo: "moonshotai/kimi-k3",  // opcional: precisamente esse, sem failover
     sistema: "Responda em português, direto ao ponto.",
     mensagens: [{ papel: "user", texto: "resuma meu desempenho em cardiologia" }],
   }),

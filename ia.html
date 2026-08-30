@@ -33,10 +33,63 @@
     <option value="codigo">código — programação</option>
     <option value="agente">agente — planejamento em etapas</option>
   </select>
+  <button class="ghost" id="iaAbrirModelo" type="button">modelo: <span id="iaModeloAtual">automático</span></button>
   <button class="ghost" id="iaLimpar" type="button" title="Apaga o histórico desta tarefa">limpar</button>
 </div>
 
 <p class="ia-aviso" id="iaAviso" hidden></p>
+
+<!-- escolha do modelo -->
+<dialog id="dlgModelo"><form method="dialog" class="dlg">
+  <span class="eyebrow">modelo</span>
+  <h3>Qual modelo responde</h3>
+  <p class="sub">"Automático" tenta o melhor da tarefa e troca sozinho se ele estiver sem
+    cota ou fora do ar. Escolher um modelo específico usa só ele — sem substituto.</p>
+
+  <ul class="modelos" id="listaModelos">
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="">
+        <span class="modelo-nome">Automático <small>recomendado</small></span>
+      </label>
+    </li>
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="openai/gpt-oss-120b">
+        <span class="modelo-nome">gpt-oss-120b <small>~0,4s · o mais rápido e estável</small></span>
+      </label>
+    </li>
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="openai/gpt-oss-20b">
+        <span class="modelo-nome">gpt-oss-20b <small>~0,4s · rede de segurança, sempre responde</small></span>
+      </label>
+    </li>
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="nvidia/nemotron-3-super-120b-a12b">
+        <span class="modelo-nome">nemotron-3-super <small>~0,6s · geral</small></span>
+      </label>
+    </li>
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="minimaxai/minimax-m3">
+        <span class="modelo-nome">minimax-m3 <small>~1,2s · programação</small></span>
+      </label>
+    </li>
+    <li>
+      <label class="modelo-opcao">
+        <input type="radio" name="modeloEscolha" value="moonshotai/kimi-k3">
+        <span class="modelo-nome">kimi-k3 <small>~2,1s · contexto longo, planejamento</small></span>
+      </label>
+    </li>
+  </ul>
+
+  <div class="acoes">
+    <button class="btn sec" value="cancel" type="submit" formnovalidate>cancelar</button>
+    <button class="btn" value="ok" type="submit">usar</button>
+  </div>
+</form></dialog>
 
 <main class="ia-conversa" id="iaConversa" aria-live="polite">
   <p class="ia-vazio">Sem conversa ainda nesta tarefa.</p>

@@ -9,7 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { conversarIA, MODELOS } from "../servidor/ia.js";
+import { conversarIA, MODELOS, MODELO_ESCOLHIVEL } from "../servidor/ia.js";
 
 const CHAVE = "nvapi-de-teste";
 const env = { NVAPI_KEY: CHAVE };
@@ -97,6 +97,56 @@ test("tarefa fora do mapa é recusada antes de chamar a NVIDIA", async () => {
     const r = await conversarIA(req({ tarefa: "caro", mensagens: ola }), env);
     assert.equal(r.status, 422);
     assert.equal(chamadas.length, 0);
+  } finally { restaurar(); }
+});
+
+/* ---------- escolha explícita de modelo ---------- */
+// O app fica atrás do Access, então o navegador pode escolher o modelo
+// exato — mas só um id da lista vetada; não é o cliente inventando o valor.
+
+test("MODELO_ESCOLHIVEL é exatamente a união dos candidatos de MODELOS", () => {
+  const uniao = new Set(Object.values(MODELOS).flat());
+  assert.deepEqual(MODELO_ESCOLHIVEL, uniao);
+});
+
+test("modelo explícito vira lista de um — sem substituto", async () => {
+  const alvo = [...MODELO_ESCOLHIVEL][0];
+  const { chamadas, restaurar } = encenar(respostaOk("resposta direta"));
+  try {
+    const r = await conversarIA(req({ modelo: alvo, mensagens: ola }), env);
+    const corpo = await r.json();
+    assert.equal(corpo.modelo, alvo);
+    assert.equal(chamadas.length, 1);
+    assert.equal(chamadas[0].model, alvo);
+  } finally { restaurar(); }
+});
+
+test("modelo explícito fora da lista é recusado antes de chamar a NVIDIA", async () => {
+  const { chamadas, restaurar } = encenar(respostaOk());
+  try {
+    const r = await conversarIA(req({ modelo: "gpt-4-inventado", mensagens: ola }), env);
+    assert.equal(r.status, 422);
+    assert.equal(chamadas.length, 0);
+  } finally { restaurar(); }
+});
+
+test("modelo explícito que falha não recorre a outro — o erro nomeia esse modelo", async () => {
+  const alvo = [...MODELO_ESCOLHIVEL][0];
+  const { chamadas, restaurar } = encenar(new Response("limite", { status: 429 }));
+  try {
+    const r = await conversarIA(req({ modelo: alvo, mensagens: ola }), env);
+    assert.equal(r.status, 429);
+    const corpo = await r.json();
+    assert.ok(corpo.erro.includes(alvo));
+    assert.equal(chamadas.length, 1, "modelo escolhido à mão não tem substituto");
+  } finally { restaurar(); }
+});
+
+test("sem modelo explícito, o comportamento por tarefa continua igual", async () => {
+  const { chamadas, restaurar } = encenar(respostaOk());
+  try {
+    await conversarIA(req({ tarefa: "codigo", mensagens: ola }), env);
+    assert.equal(chamadas[0].model, MODELOS.codigo[0]);
   } finally { restaurar(); }
 });
 

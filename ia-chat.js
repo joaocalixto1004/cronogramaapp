@@ -4,14 +4,19 @@
  * chamada direta à NVIDIA mesmo que este arquivo tentasse; a chave nunca
  * chega ao navegador de propósito (ver servidor/ia.js).
  *
- * O cliente escolhe a *tarefa* (rapido, codigo, agente, geral), nunca o
- * modelo — quem decide o modelo é o servidor, com failover entre
- * candidatos. Cada tarefa tem seu próprio histórico, em localStorage, sob
- * `ia.historico.<tarefa>`: trocar de tarefa troca a conversa mostrada.
+ * O cliente escolhe a *tarefa* (rapido, codigo, agente, geral) — quem decide
+ * o modelo, por padrão, é o servidor, com failover entre candidatos. O app
+ * fica atrás do Access, então dá pra abrir mão desse padrão e pedir um
+ * modelo exato pelo diálogo "modelo"; nesse caso não há substituto — se o
+ * escolhido estiver fora do ar, a mensagem falha em vez de outro assumir
+ * escondido. A escolha é global (vale pra qualquer tarefa), guardada em
+ * `ia.modeloForcado`; "" significa automático. Cada tarefa continua com seu
+ * próprio histórico, em `ia.historico.<tarefa>`.
  */
 
 const CHAVE = (tarefa) => `ia.historico.${tarefa}`;
 const CHAVE_ULTIMA_TAREFA = "ia.ultimaTarefa";
+const CHAVE_MODELO_FORCADO = "ia.modeloForcado";
 const $ = (sel) => document.querySelector(sel);
 
 const elTarefa = $("#iaTarefa");
@@ -21,6 +26,9 @@ const elConversa = $("#iaConversa");
 const elForma = $("#iaForma");
 const elEntrada = $("#iaEntrada");
 const elEnviar = $("#iaEnviar");
+const elAbrirModelo = $("#iaAbrirModelo");
+const elModeloAtual = $("#iaModeloAtual");
+const dlgModelo = $("#dlgModelo");
 
 let enviando = false;
 
@@ -85,6 +93,42 @@ elLimpar.addEventListener("click", () => {
   renderizar([]);
 });
 
+/* ---------- modelo escolhido ---------- */
+
+function modeloForcado() {
+  try { return localStorage.getItem(CHAVE_MODELO_FORCADO) || ""; }
+  catch { return ""; }
+}
+
+// Compara valores em JS, não em seletor CSS — os ids têm "/", e escapar isso
+// num atributo dinâmico é mais risco do que precisa.
+function radioDoModelo(id) {
+  return [...dlgModelo.querySelectorAll('input[name="modeloEscolha"]')].find((r) => r.value === id);
+}
+
+function atualizarRotuloModelo() {
+  const escolhido = modeloForcado();
+  const radio = escolhido && radioDoModelo(escolhido);
+  // Nome curto pro botão: o primeiro nó de texto do rótulo, antes do <small>.
+  elModeloAtual.textContent = radio
+    ? radio.closest(".modelo-opcao").querySelector(".modelo-nome").firstChild.textContent.trim()
+    : "automático";
+}
+
+elAbrirModelo.addEventListener("click", () => {
+  const escolhido = modeloForcado();
+  const radio = (escolhido && radioDoModelo(escolhido)) || radioDoModelo("");
+  radio.checked = true;
+  dlgModelo.showModal();
+});
+
+dlgModelo.addEventListener("close", () => {
+  if (dlgModelo.returnValue !== "ok") return;
+  const marcado = dlgModelo.querySelector('input[name="modeloEscolha"]:checked');
+  try { localStorage.setItem(CHAVE_MODELO_FORCADO, marcado?.value ?? ""); } catch { /* sem espaço; segue sem lembrar */ }
+  atualizarRotuloModelo();
+});
+
 /* ---------- textarea ---------- */
 
 elEntrada.addEventListener("input", () => {
@@ -104,6 +148,7 @@ elForma.addEventListener("submit", async (e) => {
   if (!texto) return;
 
   const tarefa = tarefaAtual();
+  const modelo = modeloForcado();
   enviando = true;
   elEnviar.disabled = true;
   elEntrada.value = "";
@@ -126,6 +171,7 @@ elForma.addEventListener("submit", async (e) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tarefa,
+        modelo: modelo || undefined,
         fluxo: true,
         // O servidor só aceita user/assistant; entradas locais de erro
         // (papel "erro") existem só para exibição e nunca são reenviadas.
@@ -192,3 +238,4 @@ try {
 } catch { /* sem localStorage; segue com o padrão do <select> */ }
 
 renderizar(ler(tarefaAtual()));
+atualizarRotuloModelo();
